@@ -1,1 +1,2 @@
 # TUQL
+TUQL: Track Up Quick Ledger - Your intelligent financial tracking system for effortless asset management. By automatically capturing transaction information through Gmail API integration and featuring convenient manual input options, TUQL helps you Track all income and expenses, Up your financial transparency, Quickly gain insights, and maintain a comprehensive digital Ledger. Simple to use yet powerful in functionality, TUQL transforms your financial management into an easy and precise process.
