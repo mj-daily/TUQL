@@ -1,13 +1,7 @@
 #%%
+from lib.gmail import get_gmail_service
 from base64 import urlsafe_b64decode
-import os
-from Google import create_service
-from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-
-from lib import extract_numbers_from_string as getnum
+from accounts import PXPay, PostBank
 
 #%% 
 def get_monthly_statement(service, query, target_dir):
@@ -46,52 +40,17 @@ def get_monthly_statement(service, query, target_dir):
                 #     f.write(file_data)
                 # print(f'Attachment {part["filename"]} downloaded.')
     return file_data
-
-class PXPay(object):
-    def __init__(self, snippet:list):
-        self.id = snippet[5].split(')')[0]
-        self.date = self._get_date(snippet)
-        self.trade_number = getnum(snippet[-3])[0]
-        self.income = int(getnum(snippet[-1].split()[0])[0])
-    def _get_date(self, item:list):
-        date_list = getnum(snippet[-4])
-        self.yyyy = date_list[0]
-        self.mm = date_list[1]
-        self.dd = date_list[2]
-        return f"{self.yyyy}-{self.mm}-{self.dd}"
-        
+  
 #%%
-CLINET_FILE = 'token.json'
-API_NAME = 'gmail'
-API_VERSION = 'v1'
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
-
-creds = None
-if os.path.exists("token.json"):
-    creds = Credentials.from_authorized_user_file("token.json", SCOPES)
-
-if not creds or not creds.valid:
-    if creds and creds.expired and creds.refresh_token:
-      creds.refresh(Request())
-    else:
-      flow = InstalledAppFlow.from_client_secrets_file(
-          "credentials.json", SCOPES
-      )
-      creds = flow.run_local_server(port=0)
-    # Save the credentials for the next run
-    with open("token.json", "w") as token:
-      token.write(creds.to_json())
-
-#%%
-# service = create_service(CLINET_FILE, API_NAME, API_VERSION, SCOPES)
-service = build("gmail", "v1", credentials=creds)
+service = get_gmail_service()
+print(type(service))
 results = service.users().getProfile(userId='me').execute()
-# service.users().labels().list(userId='me').execute()
-service.users().messages().list(userId='me', labelIds=['Label_1359550306618142105']).execute()
-msg = service.users().messages().get(userId='me', id='195bb7a4190f98f5').execute()
+service.users().messages().list(userId='me', labelIds=['Label_example']).execute()
+msg = service.users().messages().get(userId='me', id='example').execute()
 snippet = msg['snippet'].split('*')
-#%% PXPay
+
 px = PXPay(snippet)
+pt = PostBank(snippet)
 # %%
 # query = 'from:(post.gov.tw) subject:(對帳單) has:attachment filename:pdf'
 # target_dir = 'attachments/post'
