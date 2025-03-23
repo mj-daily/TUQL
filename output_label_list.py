@@ -1,5 +1,5 @@
 #%%
-from gmail import get_gmail_service
+from lib.gmail import get_gmail_service
 import json
 
 
