@@ -20,8 +20,28 @@ class MobilePayment(object):
                     name = label['name'].split('/')[-1]
                     self.label_id[name] = label['id']
         self.PXPay = self._PXPay()
+        self.EZPay = self._EZPay()
+        self.iPass = self._iPass()
     def _PXPay(self):
         msg_id = self.service.list_msg(labelIds=self.label_id['PXPay'])
+        records = []
+        for mid in msg_id:
+            mi = mid['id']
+            msg = self.service.get_msg(mi)['snippet']
+            if "交易金額" in msg:
+                records.append(self._ExtractSnippet(msg, 'CHPost'))
+        return records
+    def _EZPay(self):
+        msg_id = self.service.list_msg(labelIds=self.label_id['EZPay'])
+        records = []
+        for mid in msg_id:
+            mi = mid['id']
+            msg = self.service.get_msg(mi)['snippet']
+            if "交易金額" in msg:
+                records.append(self._ExtractSnippet(msg, 'CHPost'))
+        return records
+    def _iPass(self):
+        msg_id = self.service.list_msg(labelIds=self.label_id['iPass'])
         records = []
         for mid in msg_id:
             mi = mid['id']
