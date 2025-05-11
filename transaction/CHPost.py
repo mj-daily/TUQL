@@ -56,6 +56,7 @@ class MobilePayment(object):
     def _PXPay(self):
         msg_id = self.service.list_msg(labelIds=self.label_id['PXPay'])
         records = []
+        print("Reading records from PXPay...")
         for mid in msg_id:
             mi = mid['id']
             msg = self.service.get_msg(mi)['snippet']
@@ -65,6 +66,7 @@ class MobilePayment(object):
     def _EZPay(self):
         msg_id = self.service.list_msg(labelIds=self.label_id['EZPay'])
         records = []
+        print("Reading records from EZPay...")
         for mid in msg_id:
             mi = mid['id']
             msg = self.service.get_msg(mi)['snippet']
@@ -74,6 +76,7 @@ class MobilePayment(object):
     def _iPass(self):
         msg_id = self.service.list_msg(labelIds=self.label_id['iPass'])
         records = []
+        print("Reading records from iPass...")
         for mid in msg_id:
             mi = mid['id']
             msg = self.service.get_msg(mi)['snippet']
