@@ -61,7 +61,15 @@ class MobilePayment(object):
             mi = mid['id']
             msg = self.service.get_msg(mi)['snippet']
             if "交易金額" in msg:
-                records.append(self._ExtractSnippet(msg, 'CHPost'))
+                try:
+                    records.append(self._ExtractSnippet(msg, 'CHPost'))
+                except:
+                    print(f"Failed to extract record from PXPay message (old method)")
+                    # Attempt to use the new extraction method if the old one fails
+                    try:
+                        records.append(self._ExtractSnippetNEW(msg, 'CHPost'))
+                    except ValueError:
+                        print(f"Failed to extract record from PXPay message (new method)")
         return records
     def _EZPay(self):
         msg_id = self.service.list_msg(labelIds=self.label_id['EZPay'])
@@ -71,7 +79,14 @@ class MobilePayment(object):
             mi = mid['id']
             msg = self.service.get_msg(mi)['snippet']
             if "交易金額" in msg:
-                records.append(self._ExtractSnippet(msg, 'CHPost'))
+                try:
+                    records.append(self._ExtractSnippet(msg, 'CHPost'))
+                except:
+                    print(f"Failed to extract record from EZPay message (old method)")
+                    try:
+                        records.append(self._ExtractSnippetNEW(msg, 'CHPost'))
+                    except ValueError:
+                        print(f"Failed to extract record from EZPay message (new method)")
         return records
     def _iPass(self):
         msg_id = self.service.list_msg(labelIds=self.label_id['iPass'])
@@ -81,7 +96,14 @@ class MobilePayment(object):
             mi = mid['id']
             msg = self.service.get_msg(mi)['snippet']
             if "交易金額" in msg:
-                records.append(self._ExtractSnippet(msg, 'CHPost'))
+                try:
+                    records.append(self._ExtractSnippet(msg, 'CHPost'))
+                except:
+                    print(f"Failed to extract record from iPass message (old method)")
+                    try:
+                        records.append(self._ExtractSnippetNEW(msg, 'CHPost'))
+                    except ValueError:
+                        print(f"Failed to extract record from iPass message (new method)")
         return records
     def to_date(self, date_list):
         yyyy = date_list[0]
@@ -96,7 +118,18 @@ class MobilePayment(object):
             record['DT'] = self.to_date(getnum(snippet[-4]))
             record['NO'] = getnum(snippet[-3])[0]
             record['AM'] = int(getnum(snippet[-1].split()[0])[0])
-            return record
         else:
             raise ValueError(f"Unrecognized source: {source}")
+        return record
+    def _ExtractSnippetNEW(self, snippet:str, source:str):
+        record = {}
+        if (source == "CHPost"):
+            snippet = snippet.split()
+            record['ID'] = int(getnum(snippet[4])[0])
+            record['DT'] = self.to_date(getnum(snippet[3]))
+            record['NO'] = getnum(snippet[5])[0]
+            record['AM'] = int(getnum(snippet[7])[0])
+        else:
+            raise ValueError(f"Unrecognized source: {source}")
+        return record
             

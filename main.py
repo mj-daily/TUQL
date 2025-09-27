@@ -9,8 +9,8 @@ if __name__ == '__main__':
     target1 = mp.PXPay
     target2 = mp.EZPay
     target3 = mp.iPass
-#%%
-    Month = '2025-03'
+    #%%
+    Month = '2025-09'
     ##### PXPay amounts
     amounts1 = 0
     for t in target1:
@@ -33,10 +33,10 @@ if __name__ == '__main__':
     print(f"    PXPay: {amounts1:8} (NT$)")
     print(f"    EZPay: {amounts2:8} (NT$)")
     print(f"    iPass: {amounts3:8} (NT$)")
-#%%
+    #%%
     dp = Deposit('labels.json').records
     #%%
-    Month = "2025-03"
+    Month = "2025-07"
     amount = {}
     for r in dp:
         if Month in r['DT']:
