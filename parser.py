@@ -25,6 +25,9 @@ def init_db(db_name="finance.db"):
         );
         """)
 
+# 定義哪些摘要關鍵字屬於「收入」
+INCOME_KEYWORDS = ["薪資", "利息", "轉入", "存入", "退款"]
+
 def parse_and_save(pdf_source, password, db_name="finance.db"):
     # pdf_source 現在可以是檔案路徑字串，也可以是 BytesIO 記憶體流
     try:
@@ -45,6 +48,16 @@ def parse_and_save(pdf_source, password, db_name="finance.db"):
     for match in item_pattern.finditer(full_text):
         date, time, summary, ref_no, amount = match.groups()
         amount_val = float(amount.replace(',', ''))
+
+        # --- 修正正負號邏輯 ---
+        # 預設為支出 (負值) 除非摘要中包含收入關鍵字
+        is_income = any(keyword in summary for keyword in INCOME_KEYWORDS)
+        
+        if not is_income:
+            amount_val = -abs(amount_val)  # 強制轉為負值
+        else:
+            amount_val = abs(amount_val)   # 強制轉為正值
+        # ----------------------
         
         # 生成唯一雜湊
         raw_id = f"{account_no}|{date}|{time}|{ref_no}|{amount_val}"
