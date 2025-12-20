@@ -1,0 +1,170 @@
+/* 全域設定 */
+:root {
+    --primary-color: #2563eb;    /* 專業藍 */
+    --success-color: #10b981;    /* 收入綠 */
+    --danger-color: #ef4444;     /* 支出紅 */
+    --bg-color: #f8fafc;         /* 淺灰底 */
+    --card-bg: #ffffff;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    line-height: 1.6;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+h1 {
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 30px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* 卡片式設計 */
+.card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    margin-bottom: 24px;
+    border: 1px solid var(--border-color);
+}
+
+.card h3 {
+    margin-top: 0;
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    border-left: 4px solid var(--primary-color);
+    padding-left: 12px;
+}
+
+/* 上傳區域 */
+.upload-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+input[type="file"] {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+/* 表格樣式 */
+.table-wrapper {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+th {
+    text-align: left;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    padding: 12px 8px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+td {
+    padding: 16px 8px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.95rem;
+}
+
+tr:hover {
+    background-color: #f1f5f9;
+}
+
+/* 金額顏色標記 */
+.amount-pos {
+    color: var(--success-color);
+    font-weight: 600;
+}
+
+.amount-neg {
+    color: var(--danger-color);
+    font-weight: 600;
+}
+
+/* 序號微文字 */
+.ref-text {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Modal 彈窗優化 */
+.modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+}
+
+.modal-content {
+    background: var(--card-bg);
+    margin: 10% auto;
+    padding: 32px;
+    border-radius: 20px;
+    width: 320px;
+    text-align: center;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.btn {
+    background: var(--primary-color);
+    color: white;
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+}
+
+.btn-cancel {
+    background: transparent;
+    color: var(--text-muted);
+    margin-top: 8px;
+}
+
+input[type="password"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px;
+    margin: 16px 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    outline: none;
+}
+
+input[type="password"]:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--primary-color);
+}
