@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>My Finance Dash</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 40px; background: #f0f2f5; }
+        .container { max-width: 1000px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        
+        /* Modal 彈窗樣式 */
+        .modal { display: none; position: fixed; z-index: 1; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
+        .modal-content { background: white; margin: 15% auto; padding: 20px; border-radius: 8px; width: 300px; text-align: center; }
+        .btn { padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer; background: #007bff; color: white; }
+        .btn-cancel { background: #6c757d; margin-top: 10px; }
+        input[type="password"] { width: 80%; padding: 8px; margin: 15px 0; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 個人資產紀錄系統</h1>
+        
+        <div class="card">
+            <h3>匯入對帳單 (PDF)</h3>
+            <input type="file" id="pdfFile" accept=".pdf">
+            <p id="statusMsg" style="color: blue;"></p>
+        </div>
+
+        <div id="pwdModal" class="modal">
+            <div class="modal-content">
+                <h3>輸入 PDF 密碼</h3>
+                <p style="font-size: 0.8em; color: #666;">此密碼僅供本次解析使用，系統不會儲存</p>
+                <input type="password" id="pdfPwd" placeholder="請輸入密碼">
+                <br>
+                <button class="btn" onclick="submitUpload()">確認上傳</button>
+                <button class="btn btn-cancel" onclick="closeModal()">取消</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>最近交易明細</h3>
+            <table id="txTable">
+                <thead>
+                    <tr>
+                        <th>日期</th>
+                        <th>摘要</th>
+                        <th>金額</th>
+                        <th>序號/轉入帳號</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const pdfFileInput = document.getElementById('pdfFile');
+        const pwdModal = document.getElementById('pwdModal');
+        const pdfPwdInput = document.getElementById('pdfPwd');
+
+        // 1. 當使用者選好檔案，跳出密碼框
+        pdfFileInput.onchange = () => {
+            if (pdfFileInput.files.length > 0) {
+                pwdModal.style.display = 'block';
+                pdfPwdInput.value = ''; // 確保每次打開都是空的
+                pdfPwdInput.focus();    // 自動聚焦，方便直接輸入
+            }
+        };
+
+        // 2. 核心修改：支援 Enter 鍵提交
+        pdfPwdInput.addEventListener("keydown", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault(); // 防止表單預設行為
+                submitUpload();         // 呼叫上傳函數
+            }
+            // 額外小優化：按 Esc 鍵可以關閉彈窗
+            if (event.key === "Escape") {
+                closeModal();
+            }
+        });
+
+        function closeModal() {
+            pwdModal.style.display = 'none';
+            pdfPwdInput.value = ''; // 清空密碼欄位
+            pdfFileInput.value = ''; // 重置檔案選取
+        }
+
+        async function submitUpload() {
+            const file = pdfFileInput.files[0];
+            const password = pdfPwdInput.value;
+
+            if (!password) {
+                alert("請輸入密碼");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('password', password);
+            
+            closeModal(); // 關閉彈窗並清空密碼
+            document.getElementById('statusMsg').innerText = "正在安全解析中...";
+
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                const result = await res.json();
+                document.getElementById('statusMsg').innerText = result.message;
+                fetchTransactions(); // 刷新列表
+            } catch (err) {
+                document.getElementById('statusMsg').innerText = "連線錯誤";
+            }
+        }
+
+        async function fetchTransactions() {
+            const res = await fetch('/api/transactions');
+            const data = await res.json();
+            const tbody = document.querySelector('#txTable tbody');
+            tbody.innerHTML = data.map(tx => `
+                <tr>
+                    <td>${tx.trans_date} ${tx.trans_time}</td>
+                    <td><b>${tx.summary}</b></td>
+                    <td style="color: ${tx.amount < 0 ? 'red' : 'green'}">${tx.amount.toLocaleString()}</td>
+                    <td style="font-size: 0.8em; color: #666;">${tx.ref_no}</td>
+                </tr>
+            `).join('');
+        }
+
+        fetchTransactions();
+    </script>
+</body>
+</html>
