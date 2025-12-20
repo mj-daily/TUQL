@@ -25,10 +25,14 @@ def init_db(db_name="finance.db"):
         );
         """)
 
-def parse_and_save(pdf_file, password, db_name="finance.db"):
-    # 1. 提取文字
-    with pdfplumber.open(pdf_file, password=password) as pdf:
-        full_text = "\n".join([page.extract_text() for page in pdf.pages])
+def parse_and_save(pdf_source, password, db_name="finance.db"):
+    # pdf_source 現在可以是檔案路徑字串，也可以是 BytesIO 記憶體流
+    try:
+        with pdfplumber.open(pdf_source, password=password) as pdf:
+            full_text = "\n".join([page.extract_text() for page in pdf.pages])
+    except Exception as e:
+        # 如果密碼錯誤或 PDF 損壞，pdfplumber 會噴錯
+        raise Exception(f"PDF 開啟失敗: {str(e)}")
 
     # 2. 正則解析 Header 與 Body
     acc_match = re.search(r"帳\s+號：([\d\*\-]+)", full_text)

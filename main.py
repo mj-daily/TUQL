@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 import sqlite3
 import parser
 import os
+import io
 
 app = FastAPI()
 
@@ -37,21 +38,20 @@ async def get_transactions():
 
 @app.post("/api/upload")
 async def upload_pdf(file: UploadFile = File(...), password: str = Form(...)):
-    # 暫存上傳檔案以供 pdfplumber 讀取
-    temp_path = f"temp_{file.filename}"
-    with open(temp_path, "wb") as buffer:
-        buffer.write(await file.read())
-    
     try:
-        added, total = parser.parse_and_save(temp_path, password)
-        repeat = total - added
-        msg = f"成功解析 {total} 筆，新增 {added} 筆 ( {repeat} 筆為重複)"
+        # 1. 直接讀取檔案內容到記憶體
+        file_content = await file.read()
+        
+        # 2. 將 bytes 轉化為記憶體中的檔案流 (file-like object)
+        pdf_stream = io.BytesIO(file_content)
+        
+        # 3. 呼叫 parser (現在接收的是流而非路徑)
+        added, total = parser.parse_and_save(pdf_stream, password)
+        
+        msg = f"成功解析 {total} 筆，新增 {added} 筆"
     except Exception as e:
         msg = f"解析失敗: {str(e)}"
-    finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-            
+    # 此處完全不需要 os.remove，因為根本沒寫入磁碟
     return {"message": msg}
 
 #%%
