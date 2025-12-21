@@ -19,26 +19,34 @@ body {
     padding: 20px;
 }
 
-.container {
-    max-width: 1000px;
-    margin: 0 auto;
+.container { max-width: 1000px; margin: 0 auto; }
+h1 { font-weight: 700; color: var(--text-main); margin-bottom: 30px; }
+
+/* 統計資訊卡片區塊 */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 24px;
 }
 
-h1 {
-    font-weight: 700;
-    color: var(--text-main);
-    margin-bottom: 30px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+.stat-card {
+    text-align: center;
+    padding: 20px;
 }
 
-/* 卡片式設計 */
+.stat-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    margin-top: 10px;
+}
+
+/* 卡片與表單通用 */
 .card {
     background: var(--card-bg);
     border-radius: 16px;
     padding: 24px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
     margin-bottom: 24px;
     border: 1px solid var(--border-color);
 }
@@ -51,68 +59,36 @@ h1 {
     padding-left: 12px;
 }
 
-/* 上傳區域 */
-.upload-group {
+/* OCR 表單樣式 */
+.ocr-form {
+    text-align: left;
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 12px;
 }
-
-input[type="file"] {
-    font-size: 0.9rem;
-    color: var(--text-muted);
+.form-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
-
-/* 表格樣式 */
-.table-wrapper {
-    overflow-x: auto;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-}
-
-th {
-    text-align: left;
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-muted);
-    padding: 12px 8px;
-    border-bottom: 2px solid var(--border-color);
-}
-
-td {
-    padding: 16px 8px;
-    border-bottom: 1px solid var(--border-color);
-    font-size: 0.95rem;
-}
-
-tr:hover {
-    background-color: #f1f5f9;
-}
-
-/* 金額顏色標記 */
-.amount-pos {
-    color: var(--success-color);
+.form-item label {
+    font-size: 0.8rem;
     font-weight: 600;
-}
-
-.amount-neg {
-    color: var(--danger-color);
-    font-weight: 600;
-}
-
-/* 序號微文字 */
-.ref-text {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 0.75rem;
     color: var(--text-muted);
 }
+.form-item input {
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.form-item input:focus {
+    border-color: var(--primary-color);
+}
 
-/* Modal 彈窗優化 */
+/* Modal 彈窗 */
 .modal {
     display: none;
     position: fixed;
@@ -121,7 +97,6 @@ tr:hover {
     backdrop-filter: blur(4px);
     z-index: 100;
 }
-
 .modal-content {
     background: var(--card-bg);
     margin: 10% auto;
@@ -129,9 +104,10 @@ tr:hover {
     border-radius: 20px;
     width: 320px;
     text-align: center;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
 }
 
+/* 按鈕與文字 */
 .btn {
     background: var(--primary-color);
     color: white;
@@ -140,31 +116,21 @@ tr:hover {
     border: none;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+    width: 100%; /* 按鈕在 Modal 內滿寬 */
 }
-
-.btn:hover {
-    background: #1d4ed8;
-    transform: translateY(-1px);
-}
-
 .btn-cancel {
     background: transparent;
     color: var(--text-muted);
     margin-top: 8px;
 }
+.amount-pos { color: var(--success-color); font-weight: 600; }
+.amount-neg { color: var(--danger-color); font-weight: 600; }
+.ref-text { font-family: 'Roboto Mono', monospace; font-size: 0.75rem; color: var(--text-muted); }
 
-input[type="password"] {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 12px;
-    margin: 16px 0;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    outline: none;
-}
+/* 表格設定 */
+table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+th { padding: 12px 8px; border-bottom: 2px solid var(--border-color); text-align: left; font-size: 0.85rem; color: var(--text-muted); }
+td { padding: 16px 8px; border-bottom: 1px solid var(--border-color); font-size: 0.95rem; }
+tr:hover { background-color: #f1f5f9; }
 
-input[type="password"]:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px var(--primary-color);
-}
+input[type="password"], input[type="file"] { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; }

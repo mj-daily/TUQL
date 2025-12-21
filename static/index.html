@@ -9,10 +9,21 @@
     <div class="container">
         <h1>📊 個人資產紀錄系統</h1>
         
+        <div class="stats-grid">
+            <div class="card stat-card">
+                <h3>本月總收入</h3>
+                <div id="total-income" class="stat-value amount-pos">$0</div>
+            </div>
+            <div class="card stat-card">
+                <h3>本月總支出</h3>
+                <div id="total-expense" class="stat-value amount-neg">$0</div>
+            </div>
+        </div>
+
         <div class="card">
-            <h3>匯入對帳單 (PDF)</h3>
-            <input type="file" id="pdfFile" accept=".pdf">
-            <p id="statusMsg" style="color: blue;"></p>
+            <h3>匯入交易 (PDF 對帳單 或 截圖)</h3>
+            <input type="file" id="fileInput" accept=".pdf,image/*">
+            <p id="statusMsg" style="color: blue; margin-top: 10px;"></p>
         </div>
 
         <div id="pwdModal" class="modal">
@@ -22,6 +33,41 @@
                 <br>
                 <button id="btnSubmit" class="btn">確認上傳</button>
                 <button id="btnCancel" class="btn btn-cancel">取消</button>
+            </div>
+        </div>
+
+        <div id="ocrModal" class="modal">
+            <div class="modal-content" style="width: 400px;">
+                <h3>🔍 辨識結果校對</h3>
+                <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 20px;">
+                    請確認圖片辨識結果，手動修正錯誤項
+                </p>
+                <div class="ocr-form">
+                    <div class="form-item">
+                        <label>交易日期</label>
+                        <input type="text" id="ocrDate">
+                    </div>
+                    <div class="form-item">
+                        <label>交易時間</label>
+                        <input type="text" id="ocrTime">
+                    </div>
+                    <div class="form-item">
+                        <label>交易摘要</label>
+                        <input type="text" id="ocrSummary">
+                    </div>
+                    <div class="form-item">
+                        <label>交易金額 (支出請輸入負值)</label>
+                        <input type="number" id="ocrAmount" step="1">
+                    </div>
+                    <div class="form-item">
+                        <label>交易序號</label>
+                        <input type="text" id="ocrRef">
+                    </div>
+                </div>
+                <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                    <button id="btnOcrSave" class="btn">確認存入資料庫</button>
+                    <button id="btnOcrCancel" class="btn btn-cancel">取消</button>
+                </div>
             </div>
         </div>
 

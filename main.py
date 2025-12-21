@@ -1,11 +1,12 @@
 #%% main.py
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Body
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import sqlite3
 import parser
 import os
 import io
+import hashlib
 
 app = FastAPI()
 
@@ -39,21 +40,48 @@ async def get_transactions():
 @app.post("/api/upload")
 async def upload_pdf(file: UploadFile = File(...), password: str = Form(...)):
     try:
-        # 1. 直接讀取檔案內容到記憶體
         file_content = await file.read()
-        
-        # 2. 將 bytes 轉化為記憶體中的檔案流 (file-like object)
         pdf_stream = io.BytesIO(file_content)
-        
-        # 3. 呼叫 parser (現在接收的是流而非路徑)
         added, total = parser.parse_and_save(pdf_stream, password)
-        
-        msg = f"成功解析 {total} 筆，新增 {added} 筆"
+        msg = f"PDF 解析成功：共 {total} 筆，新增 {added} 筆"
     except Exception as e:
         msg = f"解析失敗: {str(e)}"
-    # 此處完全不需要 os.remove，因為根本沒寫入磁碟
     return {"message": msg}
 
+# --- 新增：圖片辨識 API ---
+@app.post("/api/ocr-identify")
+async def ocr_identify(file: UploadFile = File(...)):
+    try:
+        content = await file.read()
+        # 呼叫 parser 裡的 EasyOCR 邏輯
+        data = parser.recognize_screenshot(content)
+        return {"success": True, "data": data}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+    
+# --- 新增：手動/OCR 資料存入 API ---
+@app.post("/api/save-manual")
+async def save_manual(payload: dict = Body(...)):
+    with sqlite3.connect("finance.db") as conn:
+        cursor = conn.cursor()
+        
+        # 取得預設帳戶 ID (若無帳戶則先建立)
+        cursor.execute("INSERT OR IGNORE INTO accounts (account_name, account_number) VALUES (?, ?)", ("中華郵政", "Manual-Import"))
+        cursor.execute("SELECT account_id FROM accounts LIMIT 1")
+        account_id = cursor.fetchone()[0]
+        
+        # 建立去重雜湊
+        raw_id = f"MANUAL|{payload['date']}|{payload['time']}|{payload['amount']}|{payload['ref_no']}"
+        t_hash = hashlib.sha256(raw_id.encode()).hexdigest()
+        
+        try:
+            cursor.execute("""
+                INSERT INTO transactions (account_id, trans_date, trans_time, summary, ref_no, amount, trace_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (account_id, payload['date'], payload['time'], payload['summary'], payload['ref_no'], payload['amount'], t_hash))
+            return {"success": True}
+        except sqlite3.IntegrityError:
+            return {"success": False, "message": "此筆資料已存在 (重複匯入)"}
 #%%
 if __name__ == "__main__":
     import uvicorn
