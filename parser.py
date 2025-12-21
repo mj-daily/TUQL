@@ -4,6 +4,9 @@ import re
 import pdfplumber
 import easyocr
 import io
+import cv2
+from PIL import Image
+import numpy as np
 
 # 全域初始化 OCR Reader (建議開啟 GPU，第一次執行會下載模型)
 # 使用 'ch_tra' (繁體中文) 與 'en' (英文)
@@ -79,65 +82,88 @@ def parse_and_save(pdf_source, password, db_name="finance.db"):
             VALUES ({account_id}, ?, ?, ?, ?, ?, ?)
         """, transactions)
         return cursor.rowcount, len(transactions)
+
+def preprocess_image(image_bytes):
+    """
+    圖像前處理：強化特徵以區分 G/6
+    """
+    # 1. 將 bytes 轉換為 OpenCV 圖像格式
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     
+    # 2. 轉為灰階 (去除色彩雜訊)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
+    # 3. CLAHE (限制對比度自適應直方圖均衡化)
+    # 這步是關鍵：它會增強局部細節，讓 G 的中間橫槓更明顯，避免被誤認為 6
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    enhanced_img = clahe.apply(gray)
+    
+    # (可選) 二值化：若背景真的很雜，可開啟下面這行
+    # _, binary_img = cv2.threshold(enhanced_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    return enhanced_img
+
 def recognize_screenshot(image_bytes):
     """
-    新增功能：使用 EasyOCR 解析單筆交易截圖
+    OCR 辨識入口
     """
-    # 使用 BeamSearch 解碼器解決 G/6 誤認問題
-    # beamWidth=10 雖然稍慢但準確度較高
+    # 1. 執行前處理
+    processed_img = preprocess_image(image_bytes)
+    
+    # 2. 執行 OCR
+    # paragraph=True: 利用上下文來輔助判定 (例如看到 Pay 知道前面是 G 而不是 6)
+    # decoder='beamsearch': 使用更聰明的解碼搜尋
     result = reader.readtext(
-        image_bytes, 
+        processed_img, 
         detail=0, 
         decoder='beamsearch', 
         beamWidth=10, 
         paragraph=True,
-        add_margin=0.2  # 增加邊距以識別 G 的開口
+        add_margin=0.2
     )
     full_text = " ".join(result)
     
-    # --- 1. 使用 Regex 提取資料 ---
-    # 日期: 114/11/19
+    # --- 資料提取邏輯 ---
+    
+    # [序號] 使用錨點定位 (Anchor: 交易資訊/交易序號)
+    # 找關鍵字後面接的 5碼以上英數字
+    ref_match = re.search(r"(?:交易資訊|交易序號|附言)[:：\s]*([A-Z0-9-]{5,})", full_text)
+    final_ref = ref_match.group(1) if ref_match else "IMG_IMPORT"
+    
+    # [金額] 優先找千分位逗號
+    comma_matches = re.findall(r"(?<![\d.])(\d{1,3}(?:,\d{3})+(?:\.\d+)?)", full_text)
+    amount_val = 0.0
+    if comma_matches:
+        best_match = max(comma_matches, key=len)
+        amount_val = float(best_match.replace(',', ''))
+    else:
+        # 備用：找關鍵字後的數字
+        kw_amount = re.search(r"(?:金額|薪\s*資|存入|支出|NT\$)[^0-9\-]*([-\d]+(?:\.\d+)?)", full_text)
+        if kw_amount:
+            try: amount_val = float(kw_amount.group(1))
+            except: pass
+
+    # [日期] & [時間]
     date_match = re.search(r"(\d{3}/\d{2}/\d{2})", full_text)
-    # 時間: 01:19:13
     time_match = re.search(r"(\d{2}:\d{2}:\d{2})", full_text)
     
-    # 金額提取策略：找數字與逗號的組合，且長度大於2
-    amounts = re.findall(r"[\d,]{2,}", full_text)
-    print("Detected amounts:", amounts)
-    # 過濾掉日期 (含斜線) 與時間 (含冒號)
-    valid_amounts = [a for a in amounts if '/' not in a and ':' not in a]
-    
-    # 金額處理：取最長的一個 (通常金額位數較多)，或第一個
-    amount_val = 0.0
-    if valid_amounts:
-        # 取看起來最像金額的 (最長的字串)
-        raw_amount = max(valid_amounts, key=len)
-        amount_val = float(raw_amount.replace(',', ''))
-
-    # --- 2. 摘要智慧判斷 ---
+    # [摘要] 判斷
     summary = "單筆匯入"
     if "薪" in full_text and "資" in full_text:
         summary = "薪資"
+        amount_val = abs(amount_val)
     elif "提款" in full_text:
         summary = "提款"
-        # 提款通常是整數，且為支出
         amount_val = -abs(amount_val)
     elif "轉帳" in full_text:
         summary = "轉帳"
         amount_val = -abs(amount_val)
-    
-    # 若摘要是薪資，強制轉為正值
-    if summary == "薪資":
-        amount_val = abs(amount_val)
-
-    # 交易序號 (如 GR-07871234)
-    ref_match = re.search(r"([A-Z]{2}-[\d]+)", full_text)
 
     return {
         "date": date_match.group(1) if date_match else "",
         "time": time_match.group(1) if time_match else "00:00:00",
         "summary": summary,
         "amount": amount_val,
-        "ref_no": ref_match.group(1) if ref_match else "IMG_IMPORT"
+        "ref_no": final_ref
     }
