@@ -49,9 +49,7 @@ async function fetchAccounts() {
         if (acc.account_name === 'Manual-Import') cardClass = 'acc-card-manual';
         
         // 格式化帳號 (只顯示後4碼)
-        const displayNum = acc.account_number.length > 4 
-            ? '•••• ' + acc.account_number.slice(-4) 
-            : acc.account_number;
+        const displayNum = acc.account_number;
 
         html += `
             <div class="account-card ${cardClass} ${currentFilterAccountId === acc.account_id ? 'active' : ''}" 
@@ -61,6 +59,13 @@ async function fetchAccounts() {
                 <div class="acc-number">${displayNum}</div>
             </div>
         `;
+
+        container.innerHTML = html;
+    
+        // 更新總資產
+        const netWorthEl = document.getElementById('net-worth');
+        netWorthEl.innerText = `$${netWorth.toLocaleString()}`;
+        netWorthEl.style.color = netWorth >= 0 ? 'var(--text-main)' : 'var(--danger-color)';
     });
 
     container.innerHTML = html;
@@ -147,6 +152,7 @@ async function handleImageUpload(file) {
         if (result.success) {
             statusMsg.innerText = "✅ 辨識完成，請校對資料";
             // 填入校對視窗
+            document.getElementById('ocrAccount').value = result.data.account_number || "";
             document.getElementById('ocrDate').value = result.data.date;
             document.getElementById('ocrTime').value = result.data.time;
             document.getElementById('ocrSummary').value = result.data.summary;
@@ -167,6 +173,7 @@ const ocrErrorMsg = document.getElementById('ocrErrorMsg');
 
 async function saveOcrResult() {
     const data = {
+        account_number: document.getElementById('ocrAccount').value,
         date: document.getElementById('ocrDate').value,
         time: document.getElementById('ocrTime').value,
         summary: document.getElementById('ocrSummary').value,

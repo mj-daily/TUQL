@@ -123,9 +123,17 @@ def recognize_screenshot(image_bytes):
         add_margin=0.2
     )
     full_text = " ".join(result)
+    print("OCR 辨識結果：", full_text)  # 除錯用
     
     # --- 資料提取邏輯 ---
     
+    # [帳號] 截圖常見格式： "帳號 *********12345" 或 "轉出帳號 12345"
+    # 抓取 "帳號" 後面的數字與星號組合
+    acc_match = re.search(r"(?:帳號|轉出帳號)[:：\s]*([\d\*]+)", full_text)
+    print("帳號擷取結果：", acc_match.group(1) if acc_match else "無")  # 除錯用
+    # 如果沒抓到，預設回傳空字串，讓前端顯示提示
+    account_number = acc_match.group(1) if acc_match else ""
+
     # [序號] 使用錨點定位 (Anchor: 交易資訊/交易序號)
     # 找關鍵字後面接的 5碼以上英數字
     ref_match = re.search(r"(?:交易資訊|交易序號|附言)[:：\s]*([A-Z0-9-]{5,})", full_text)
@@ -165,5 +173,6 @@ def recognize_screenshot(image_bytes):
         "time": time_match.group(1) if time_match else "00:00:00",
         "summary": summary,
         "amount": amount_val,
-        "ref_no": final_ref
+        "ref_no": final_ref,
+        "account_number": account_number
     }

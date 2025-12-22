@@ -8,7 +8,7 @@
 <body>
     <div class="container">
         <h1>📊 個人資產紀錄系統</h1>
-        
+
         <div style="margin-bottom: 20px;">
             <span style="color: var(--text-muted); font-size: 0.9rem;">總資產淨值</span>
             <div id="net-worth" style="font-size: 2rem; font-weight: 800; color: var(--text-main);">$0</div>
@@ -54,6 +54,10 @@
                     請確認圖片辨識結果，手動修正錯誤項
                 </p>
                 <div class="ocr-form">
+                    <div class="form-item">
+                        <label>歸屬帳號</label>
+                        <input type="text" id="ocrAccount" placeholder="例: 0001234567890">
+                    </div>
                     <div class="form-item">
                         <label>交易日期</label>
                         <input type="text" id="ocrDate">

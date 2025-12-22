@@ -85,13 +85,24 @@ async def save_manual(payload: dict = Body(...)):
     with sqlite3.connect("finance.db") as conn:
         cursor = conn.cursor()
         
-        # 取得預設帳戶 ID (若無帳戶則先建立)
-        cursor.execute("INSERT OR IGNORE INTO accounts (account_name, account_number) VALUES (?, ?)", ("中華郵政", "Manual-Import"))
-        cursor.execute("SELECT account_id FROM accounts LIMIT 1")
-        account_id = cursor.fetchone()[0]
+        # [修改重點]：根據前端傳來的帳號號碼進行歸戶
+        target_acc_num = payload.get('account_number', 'Manual-Import')
         
-        # 建立去重雜湊
-        raw_id = f"MANUAL|{payload['date']}|{payload['time']}|{payload['amount']}|{payload['ref_no']}"
+        # 1. 先嘗試找這個帳號是否存在
+        cursor.execute("SELECT account_id FROM accounts WHERE account_number = ?", (target_acc_num,))
+        row = cursor.fetchone()
+        
+        if row:
+            account_id = row[0]
+        else:
+            # 2. 如果不存在 (例如第一次 OCR 某個新帳號)，則自動建立
+            # 注意：這裡預設名稱給 "中華郵政(OCR)"，你可以手動進資料庫改名
+            cursor.execute("INSERT INTO accounts (account_name, account_number) VALUES (?, ?)", 
+                           ("中華郵政(OCR)", target_acc_num))
+            account_id = cursor.lastrowid
+        
+        # 建立去重雜湊 (加入 account_id 確保不同帳號的相同交易不會衝突)
+        raw_id = f"MANUAL|{account_id}|{payload['date']}|{payload['time']}|{payload['amount']}|{payload['ref_no']}"
         t_hash = hashlib.sha256(raw_id.encode()).hexdigest()
         
         try:
@@ -101,7 +112,7 @@ async def save_manual(payload: dict = Body(...)):
             """, (account_id, payload['date'], payload['time'], payload['summary'], payload['ref_no'], payload['amount'], t_hash))
             return {"success": True}
         except sqlite3.IntegrityError:
-            return {"success": False, "message": "此筆資料已存在 (重複匯入)"}
+            return {"success": False, "message": "此筆資料已存在"}
 
 @app.delete("/api/transaction/{tx_id}")
 async def delete_transaction(tx_id: int):
