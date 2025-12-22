@@ -82,6 +82,36 @@ async def save_manual(payload: dict = Body(...)):
             return {"success": True}
         except sqlite3.IntegrityError:
             return {"success": False, "message": "此筆資料已存在 (重複匯入)"}
+
+@app.delete("/api/transaction/{tx_id}")
+async def delete_transaction(tx_id: int):
+    try:
+        with sqlite3.connect("finance.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM transactions WHERE transaction_id = ?", (tx_id,))
+            if cursor.rowcount == 0:
+                return {"success": False, "message": "找不到該筆交易"}
+            conn.commit()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@app.put("/api/transaction/{tx_id}")
+async def update_transaction(tx_id: int, payload: dict = Body(...)):
+    try:
+        with sqlite3.connect("finance.db") as conn:
+            cursor = conn.cursor()
+            # 這裡我們允許修改日期、時間、摘要、金額、序號
+            # 注意：這裡不重新計算 hash，因為這只是修正資料
+            cursor.execute("""
+                UPDATE transactions 
+                SET trans_date = ?, trans_time = ?, summary = ?, amount = ?, ref_no = ?
+                WHERE transaction_id = ?
+            """, (payload['date'], payload['time'], payload['summary'], payload['amount'], payload['ref_no'], tx_id))
+            conn.commit()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
 #%%
 if __name__ == "__main__":
     import uvicorn

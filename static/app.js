@@ -167,6 +167,7 @@ async function fetchTransactions() {
 
         const amountClass = tx.amount >= 0 ? 'amount-pos' : 'amount-neg';
         const displayAmount = (tx.amount >= 0 ? '+' : '') + tx.amount.toLocaleString();
+        const txStr = encodeURIComponent(JSON.stringify(tx));
         
         return `
             <tr>
@@ -177,6 +178,12 @@ async function fetchTransactions() {
                 <td><b>${tx.summary}</b></td>
                 <td class="${amountClass}">${displayAmount}</td>
                 <td class="ref-text">${tx.ref_no || '-'}</td>
+                <td>
+                    <div class="action-buttons">
+                        <button class="btn-icon edit" onclick="openEditModal('${txStr}')" title="編輯">✎</button>
+                        <button class="btn-icon delete" onclick="deleteTx(${tx.transaction_id})" title="刪除">🗑️</button>
+                    </div>
+                </td>
             </tr>
         `;
     }).join('');
@@ -184,6 +191,73 @@ async function fetchTransactions() {
     // 更新統計卡片
     document.getElementById('total-income').innerText = `$${totalIncome.toLocaleString()}`;
     document.getElementById('total-expense').innerText = `$${totalExpense.toLocaleString()}`;
+}
+
+// 2. 刪除功能
+async function deleteTx(id) {
+    if (!confirm("確定要刪除這筆交易嗎？此操作無法復原。")) return;
+
+    try {
+        const res = await fetch(`/api/transaction/${id}`, { method: 'DELETE' });
+        const result = await res.json();
+        if (result.success) {
+            fetchTransactions(); // 重新整理列表
+        } else {
+            alert("刪除失敗: " + result.message);
+        }
+    } catch (e) {
+        alert("連線錯誤");
+    }
+}
+
+// 3. 編輯功能相關
+const editModal = document.getElementById('editModal');
+
+function openEditModal(txStr) {
+    const tx = JSON.parse(decodeURIComponent(txStr));
+    
+    // 填入資料到編輯彈窗
+    document.getElementById('editTxId').value = tx.transaction_id;
+    document.getElementById('editDate').value = tx.trans_date;
+    document.getElementById('editTime').value = tx.trans_time;
+    document.getElementById('editSummary').value = tx.summary;
+    document.getElementById('editAmount').value = tx.amount;
+    document.getElementById('editRef').value = tx.ref_no;
+    
+    editModal.style.display = 'block';
+}
+
+function closeEditModal() {
+    editModal.style.display = 'none';
+}
+
+async function submitEdit() {
+    const id = document.getElementById('editTxId').value;
+    const payload = {
+        date: document.getElementById('editDate').value,
+        time: document.getElementById('editTime').value,
+        summary: document.getElementById('editSummary').value,
+        amount: parseFloat(document.getElementById('editAmount').value),
+        ref_no: document.getElementById('editRef').value
+    };
+
+    try {
+        const res = await fetch(`/api/transaction/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        
+        if (result.success) {
+            closeEditModal();
+            fetchTransactions(); // 刷新列表
+        } else {
+            alert("更新失敗: " + result.message);
+        }
+    } catch (e) {
+        alert("連線錯誤");
+    }
 }
 
 // 初始化載入

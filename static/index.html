@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>My Finance Dash</title>
-    <link rel="stylesheet" href="/static/style.css?v=2">
+    <link rel="stylesheet" href="/static/style.css?v=3">
 </head>
 <body>
     <div class="container">
@@ -74,6 +74,41 @@
             </div>
         </div>
 
+        <div id="editModal" class="modal">
+            <div class="modal-content">
+                <h3>✏️ 編輯交易</h3>
+                <input type="hidden" id="editTxId">
+                
+                <div class="ocr-form">
+                    <div class="form-item">
+                        <label>日期</label>
+                        <input type="text" id="editDate">
+                    </div>
+                    <div class="form-item">
+                        <label>時間</label>
+                        <input type="text" id="editTime">
+                    </div>
+                    <div class="form-item">
+                        <label>摘要</label>
+                        <input type="text" id="editSummary">
+                    </div>
+                    <div class="form-item">
+                        <label>金額</label>
+                        <input type="number" id="editAmount" step="1">
+                    </div>
+                    <div class="form-item">
+                        <label>序號</label>
+                        <input type="text" id="editRef">
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button class="btn" onclick="submitEdit()">儲存修改</button>
+                    <button class="btn btn-cancel" onclick="closeEditModal()">取消</button>
+                </div>
+            </div>
+        </div>
+
         <div class="card">
             <h3>最近交易明細</h3>
             <table id="txTable">
@@ -83,12 +118,12 @@
                         <th>摘要</th>
                         <th>金額</th>
                         <th>序號/轉入帳號</th>
-                    </tr>
+                        <th style="width: 100px;">操作</th> </tr>
                 </thead>
                 <tbody></tbody>
             </table>
         </div>
     </div>
-    <script src="/static/app.js?v=2"></script>
+    <script src="/static/app.js?v=3"></script>
 </body>
 </html>
