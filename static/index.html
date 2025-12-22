@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>My Finance Dash</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
     <div class="container">
@@ -64,6 +64,9 @@
                         <input type="text" id="ocrRef">
                     </div>
                 </div>
+
+                <p id="ocrErrorMsg" style="color: var(--danger-color); font-weight: bold; margin-top: 15px; min-height: 1.5em;"></p>
+                
                 <div style="margin-top: 25px; display: flex; flex-direction: column; gap: 10px; padding-bottom: 10px;">
                     <button id="btnOcrSave" class="btn">確認存入資料庫</button>
                     <button id="btnOcrCancel" class="btn btn-cancel">取消</button>
@@ -86,6 +89,6 @@
             </table>
         </div>
     </div>
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=2"></script>
 </body>
 </html>

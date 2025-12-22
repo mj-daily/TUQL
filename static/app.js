@@ -105,6 +105,9 @@ async function handleImageUpload(file) {
     }
 }
 
+// 新增選取錯誤訊息元素
+const ocrErrorMsg = document.getElementById('ocrErrorMsg');
+
 async function saveOcrResult() {
     const data = {
         date: document.getElementById('ocrDate').value,
@@ -113,6 +116,13 @@ async function saveOcrResult() {
         amount: parseFloat(document.getElementById('ocrAmount').value),
         ref_no: document.getElementById('ocrRef').value
     };
+
+    // 1. UX 優化：鎖定按鈕並顯示處理中
+    const btnSave = document.getElementById('btnOcrSave');
+    const originalText = btnSave.innerText;
+    btnSave.innerText = "⏳ 儲存中...";
+    btnSave.disabled = true;
+    ocrErrorMsg.innerText = ""; // 清空舊的錯誤訊息
 
     try {
         const res = await fetch('/api/save-manual', {
@@ -123,15 +133,22 @@ async function saveOcrResult() {
         const result = await res.json();
         
         if (result.success) {
+            // 成功：關閉 Modal 並刷新
             ocrModal.style.display = 'none';
-            fileInput.value = ''; // 清空選擇
+            fileInput.value = ''; 
             statusMsg.innerText = "✅ 單筆交易存入成功！";
             fetchTransactions();
         } else {
-            alert(result.message);
+            // 失敗：顯示錯誤在 Modal 內，不關閉視窗
+            // 這樣使用者可以看到 "重複匯入" 的訊息，決定要取消還是改序號
+            ocrErrorMsg.innerText = "❌ " + result.message;
         }
     } catch (err) {
-        alert("存入失敗");
+        ocrErrorMsg.innerText = "❌ 連線錯誤，請稍後再試";
+    } finally {
+        // 2. 恢復按鈕狀態
+        btnSave.innerText = originalText;
+        btnSave.disabled = false;
     }
 }
 
