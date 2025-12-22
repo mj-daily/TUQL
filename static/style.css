@@ -1,4 +1,4 @@
-/* 全域設定 */
+/* static/style.css */
 :root {
     --primary-color: #2563eb;    /* 專業藍 */
     --success-color: #10b981;    /* 收入綠 */
@@ -20,7 +20,7 @@ body {
 }
 
 .container { max-width: 1000px; margin: 0 auto; }
-h1 { font-weight: 700; color: var(--text-main); margin-bottom: 30px; }
+h1 { font-weight: 700; color: var(--text-main); margin-bottom: 30px; display: flex; align-items: center; gap: 10px; }
 
 /* 統計資訊卡片區塊 */
 .stats-grid {
@@ -99,12 +99,27 @@ h1 { font-weight: 700; color: var(--text-main); margin-bottom: 30px; }
 }
 .modal-content {
     background: var(--card-bg);
-    margin: 10% auto;
+    margin: 5% auto;
     padding: 32px;
     border-radius: 20px;
-    width: 320px;
+    width: 90%;
+    max-width: 450px;
+    max-height: 85vh;
+    overflow-y: auto;
     text-align: center;
     box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+    position: relative;
+}
+/* 針對捲軸的美化 (Chrome/Safari/Edge) - 選用 */
+.modal-content::-webkit-scrollbar {
+    width: 8px;
+}
+.modal-content::-webkit-scrollbar-track {
+    background: transparent; 
+}
+.modal-content::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 4px;
 }
 
 /* 按鈕與文字 */
