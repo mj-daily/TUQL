@@ -122,6 +122,69 @@ h1 { font-weight: 700; color: var(--text-main); margin-bottom: 30px; display: fl
     border-radius: 4px;
 }
 
+/* 帳戶列表容器 */
+.account-scroll-container {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding-bottom: 10px; /* 預留捲軸空間 */
+    margin-bottom: 24px;
+    
+    /* 隱藏捲軸 (Chrome/Safari) */
+    scrollbar-width: none; 
+    -ms-overflow-style: none;
+}
+.account-scroll-container::-webkit-scrollbar {
+    display: none;
+}
+
+/* 帳戶卡片本體 */
+.account-card {
+    min-width: 260px;
+    background: linear-gradient(135deg, #2563eb, #1e40af); /* 藍色漸層 */
+    color: white;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+}
+
+.account-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
+}
+
+/* 不同帳戶給不同顏色 (透過 JS 加入 class) */
+.acc-card-manual { background: linear-gradient(135deg, #475569, #1e293b); } /* 深灰 */
+.acc-card-cash { background: linear-gradient(135deg, #059669, #047857); }   /* 綠色 */
+
+/* 卡片內文字 */
+.acc-name {
+    font-size: 0.9rem;
+    opacity: 0.9;
+    margin-bottom: 4px;
+}
+.acc-balance {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+.acc-number {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.8rem;
+    opacity: 0.7;
+    letter-spacing: 1px;
+}
+
+/* 選中狀態 */
+.account-card.active {
+    box-shadow: 0 0 0 3px #fbbf24; /* 金色邊框 */
+    transform: scale(1.02);
+}
+
 /* 按鈕與文字 */
 .action-buttons {
     display: flex;

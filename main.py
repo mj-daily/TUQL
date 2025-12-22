@@ -37,6 +37,26 @@ async def get_transactions():
     conn.close()
     return data
 
+@app.get("/api/accounts")
+async def get_accounts():
+    conn = sqlite3.connect("finance.db")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # 使用 LEFT JOIN 計算每個帳戶的餘額 (總收入 - 總支出)
+    # COALESCE 確保沒有交易的帳戶餘額顯示為 0
+    cursor.execute("""
+        SELECT a.account_id, a.account_name, a.account_number, 
+               COALESCE(SUM(t.amount), 0) as balance
+        FROM accounts a
+        LEFT JOIN transactions t ON a.account_id = t.account_id
+        GROUP BY a.account_id
+    """)
+    
+    data = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return data
+
 @app.post("/api/upload")
 async def upload_pdf(file: UploadFile = File(...), password: str = Form(...)):
     try:

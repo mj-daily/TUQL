@@ -13,6 +13,63 @@ const ocrModal = document.getElementById('ocrModal');
 const btnOcrSave = document.getElementById('btnOcrSave');
 const btnOcrCancel = document.getElementById('btnOcrCancel');
 
+// 全域變數，存儲所有交易資料 (方便前端篩選，不用一直 call API)
+let allTransactions = [];
+let currentFilterAccountId = null; // null 代表顯示全部
+
+// 初始化
+document.addEventListener('DOMContentLoaded', async () => {
+    await fetchAccounts();     // 先載入帳戶
+    await fetchTransactions(); // 再載入交易
+});
+
+// 取得並渲染帳戶
+async function fetchAccounts() {
+    const res = await fetch('/api/accounts');
+    const accounts = await res.json();
+    
+    const container = document.getElementById('account-list');
+    let netWorth = 0;
+    
+    // 加入「全部帳戶」的選項卡片
+    let html = `
+        <div class="account-card ${currentFilterAccountId === null ? 'active' : ''}" 
+             onclick="filterByAccount(null)" style="background: linear-gradient(135deg, #6366f1, #4338ca);">
+            <div class="acc-name">總覽</div>
+            <div class="acc-balance">ALL</div>
+            <div class="acc-number">所有帳戶</div>
+        </div>
+    `;
+
+    accounts.forEach(acc => {
+        netWorth += acc.balance;
+        
+        // 判斷樣式 (如果是 Manual-Import 給灰色)
+        let cardClass = '';
+        if (acc.account_name === 'Manual-Import') cardClass = 'acc-card-manual';
+        
+        // 格式化帳號 (只顯示後4碼)
+        const displayNum = acc.account_number.length > 4 
+            ? '•••• ' + acc.account_number.slice(-4) 
+            : acc.account_number;
+
+        html += `
+            <div class="account-card ${cardClass} ${currentFilterAccountId === acc.account_id ? 'active' : ''}" 
+                 onclick="filterByAccount(${acc.account_id})">
+                <div class="acc-name">${acc.account_name}</div>
+                <div class="acc-balance">$${acc.balance.toLocaleString()}</div>
+                <div class="acc-number">${displayNum}</div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+    document.getElementById('net-worth').innerText = `$${netWorth.toLocaleString()}`;
+    
+    // 根據淨值變色
+    document.getElementById('net-worth').style.color = netWorth >= 0 ? 'var(--text-main)' : 'var(--danger-color)';
+}
+
 // --- 事件監聽 ---
 
 // 檔案選擇變更
@@ -154,21 +211,29 @@ async function saveOcrResult() {
 
 async function fetchTransactions() {
     const res = await fetch('/api/transactions');
-    const data = await res.json();
+    allTransactions = await res.json(); // 存入全域變數
+    renderTable(); // 執行渲染
+}
 
-    // 計算統計
-    let totalIncome = 0;
-    let totalExpense = 0;
+// 渲染表格與統計 (核心邏輯分離)
+function renderTable() {
+    // 根據目前選中的帳戶 ID 篩選資料
+    const filteredData = currentFilterAccountId 
+        ? allTransactions.filter(tx => tx.account_id === currentFilterAccountId)
+        : allTransactions;
 
+    // 計算本頁面(或本帳戶)的收支統計
+    let inc = 0, exp = 0;
+    
     const tbody = document.querySelector('#txTable tbody');
-    tbody.innerHTML = data.map(tx => {
-        if (tx.amount >= 0) totalIncome += tx.amount;
-        else totalExpense += tx.amount;
-
+    tbody.innerHTML = filteredData.map(tx => {
+        if (tx.amount >= 0) inc += tx.amount; else exp += tx.amount;
+        
+        // ... (原本的表格渲染邏輯，含按鈕) ...
         const amountClass = tx.amount >= 0 ? 'amount-pos' : 'amount-neg';
         const displayAmount = (tx.amount >= 0 ? '+' : '') + tx.amount.toLocaleString();
         const txStr = encodeURIComponent(JSON.stringify(tx));
-        
+
         return `
             <tr>
                 <td>
@@ -188,12 +253,25 @@ async function fetchTransactions() {
         `;
     }).join('');
 
-    // 更新統計卡片
-    document.getElementById('total-income').innerText = `$${totalIncome.toLocaleString()}`;
-    document.getElementById('total-expense').innerText = `$${totalExpense.toLocaleString()}`;
+    // 更新下方統計卡片
+    document.getElementById('total-income').innerText = `$${inc.toLocaleString()}`;
+    document.getElementById('total-expense').innerText = `$${exp.toLocaleString()}`;
 }
 
-// 2. 刪除功能
+// 切換帳戶篩選
+function filterByAccount(accountId) {
+    currentFilterAccountId = accountId;
+    
+    // 更新卡片選中狀態 UI
+    document.querySelectorAll('.account-card').forEach(card => card.classList.remove('active'));
+    // 這裡可以用 event.currentTarget 來加 active，或重新 render fetchAccounts (較簡單但較慢)
+    // 為了效能，我們直接重新 fetchAccounts 其實也很快，因為它會重新計算餘額
+    fetchAccounts(); 
+    
+    renderTable(); // 重新渲染表格
+}
+
+// 刪除功能
 async function deleteTx(id) {
     if (!confirm("確定要刪除這筆交易嗎？此操作無法復原。")) return;
 
@@ -210,7 +288,7 @@ async function deleteTx(id) {
     }
 }
 
-// 3. 編輯功能相關
+// 編輯功能相關
 const editModal = document.getElementById('editModal');
 
 function openEditModal(txStr) {
