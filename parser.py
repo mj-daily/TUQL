@@ -3,9 +3,7 @@ import hashlib
 import re
 import pdfplumber
 import easyocr
-import io
 import cv2
-from PIL import Image
 import numpy as np
 
 # 全域初始化 OCR Reader (建議開啟 GPU，第一次執行會下載模型)
@@ -15,11 +13,14 @@ reader = easyocr.Reader(['ch_tra', 'en'], gpu=True)
 def init_db(db_name="finance.db"):
     with sqlite3.connect(db_name) as conn:
         cursor = conn.cursor()
+        cursor.execute("PRAGMA foreign_keys = ON;") # 啟用外鍵約束
         cursor.executescript("""
         CREATE TABLE IF NOT EXISTS accounts (
             account_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_name TEXT NOT NULL,
-            account_number TEXT UNIQUE
+            account_name TEXT NOT NULL UNIQUE, -- 暱稱唯一
+            account_number TEXT NOT NULL,      -- 帳號只存末 5 碼
+            bank_code TEXT NOT NULL,           -- 銀行代碼
+            initial_balance REAL DEFAULT 0.0
         );
         CREATE TABLE IF NOT EXISTS transactions (
             transaction_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,10 +31,9 @@ def init_db(db_name="finance.db"):
             ref_no TEXT,
             amount REAL NOT NULL,
             trace_hash TEXT UNIQUE NOT NULL,
-            FOREIGN KEY (account_id) REFERENCES accounts(account_id)
+            FOREIGN KEY (account_id) REFERENCES accounts(account_id) ON DELETE CASCADE
         );
         """)
-
 
 def parse_and_save(pdf_source, password, db_name="finance.db"):
     # pdf_source 現在可以是檔案路徑字串，也可以是 BytesIO 記憶體流
@@ -46,12 +46,11 @@ def parse_and_save(pdf_source, password, db_name="finance.db"):
 
     # 2. 正則解析 Header 與 Body
     acc_match = re.search(r"帳\s+號：([\d\*\-]+)", full_text)
-    account_no = acc_match.group(1).strip() if acc_match else "Unknown"
+    raw_acc = acc_match.group(1).strip() if acc_match else "Unknown"
+    account_no_5 = raw_acc[-5:] if len(raw_acc) >= 5 else raw_acc
     
     # 定義哪些摘要關鍵字屬於「收入」
     INCOME_KEYWORDS = ["薪資", "利息", "轉入", "存入", "退款"]
-
-    # 匹配模式：日期、時間、摘要、序號(非貪婪)、金額
     item_pattern = re.compile(r"(\d{3}/\d{2}/\d{2})\s+(\d{2}:\d{2}:\d{2})\s+(\S+)\s+(.*?)\s+([\d,]+)(?=\n|$)")
     
     transactions = []
@@ -64,17 +63,29 @@ def parse_and_save(pdf_source, password, db_name="finance.db"):
             amount_val = -abs(amount_val)
         
         # 生成唯一雜湊
-        raw_id = f"{account_no}|{date}|{time}|{ref_no}|{amount_val}"
+        raw_id = f"{account_no_5}|{date}|{time}|{ref_no}|{amount_val}"
         t_hash = hashlib.sha256(raw_id.encode()).hexdigest()
-        
         transactions.append((date, time, summary, ref_no.strip(), amount_val, t_hash))
 
     # 3. 寫入資料庫
     with sqlite3.connect(db_name) as conn:
         cursor = conn.cursor()
-        cursor.execute("INSERT OR IGNORE INTO accounts (account_name, account_number) VALUES (?, ?)", ("中華郵政", account_no))
-        cursor.execute("SELECT account_id FROM accounts WHERE account_number = ?", (account_no,))
-        account_id = cursor.fetchone()[0]
+        # 嘗試尋找帳戶
+        cursor.execute("SELECT account_id FROM accounts WHERE account_number = ?", (account_no_5,))
+        row = cursor.fetchone()
+        if row:
+            account_id = row[0]
+        else:
+            # 若不存在，建立一個預設帳戶，名稱為「未知帳戶_末5碼」，並指定銀行代碼為 "000"
+            # 使用者可後續再修改帳戶名稱
+            acc_name = f"未知帳戶_{account_no_5}"
+            try:
+                cursor.execute("INSERT INTO accounts (account_name, account_number, bank_code) VALUES (?, ?, ?)", 
+                               (acc_name, account_no_5, "000"))
+                account_id = cursor.lastrowid
+            except sqlite3.IntegrityError:
+                cursor.execute("SELECT account_id FROM accounts WHERE account_name = ?", (acc_name,))
+                account_id = cursor.fetchone()[0]
         
         cursor.executemany(f"""
             INSERT OR IGNORE INTO transactions 
@@ -127,11 +138,8 @@ def recognize_screenshot(image_bytes):
     
     # --- 資料提取邏輯 ---
     
-    # [帳號] 截圖常見格式： "帳號 *********12345" 或 "轉出帳號 12345"
-    # 抓取 "帳號" 後面的數字與星號組合
-    acc_match = re.search(r"(?:帳號|轉出帳號)[:：\s]*([\d\*]+)", full_text)
-    print("帳號擷取結果：", acc_match.group(1) if acc_match else "無")  # 除錯用
-    # 如果沒抓到，預設回傳空字串，讓前端顯示提示
+    # [帳號] 抓取 "帳號" 最後 5 碼
+    acc_match = re.search(r"(?:帳號|轉出帳號)[:：\s]*[\d\*]*(\d{5})", full_text)
     account_number = acc_match.group(1) if acc_match else ""
 
     # [序號] 使用錨點定位 (Anchor: 交易資訊/交易序號)
@@ -156,7 +164,7 @@ def recognize_screenshot(image_bytes):
     date_match = re.search(r"(\d{3}/\d{2}/\d{2})", full_text)
     time_match = re.search(r"(\d{2}:\d{2}:\d{2})", full_text)
     
-    # [摘要] 判斷
+    # [摘要] 根據關鍵字判斷
     summary = "單筆匯入"
     if "薪" in full_text and "資" in full_text:
         summary = "薪資"

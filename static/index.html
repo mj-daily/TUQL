@@ -7,7 +7,12 @@
 </head>
 <body>
     <div class="container">
-        <h1>📊 個人資產紀錄系統</h1>
+        <h1>
+            📊 個人資產紀錄系統
+            <button class="btn btn-sm" onclick="openAccModal()" style="width: auto; margin-left: auto; background-color: #64748b;">
+                ⚙️ 帳戶管理
+            </button>
+        </h1>
 
         <div style="margin-bottom: 20px;">
             <span style="color: var(--text-muted); font-size: 0.9rem;">總資產淨值</span>
@@ -15,9 +20,6 @@
         </div>
 
         <div id="account-list" class="account-scroll-container">
-            </div>
-
-        <div class="stats-grid">
             </div>
 
         <div class="stats-grid">
@@ -37,93 +39,6 @@
             <p id="statusMsg" style="color: blue; margin-top: 10px;"></p>
         </div>
 
-        <div id="pwdModal" class="modal">
-            <div class="modal-content">
-                <h3>輸入 PDF 密碼</h3>
-                <input type="password" id="pdfPwd" placeholder="請輸入密碼">
-                <br>
-                <button id="btnSubmit" class="btn">確認上傳</button>
-                <button id="btnCancel" class="btn btn-cancel">取消</button>
-            </div>
-        </div>
-
-        <div id="ocrModal" class="modal">
-            <div class="modal-content">
-                <h3>🔍 辨識結果校對</h3>
-                <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 20px;">
-                    請確認圖片辨識結果，手動修正錯誤項
-                </p>
-                <div class="ocr-form">
-                    <div class="form-item">
-                        <label>歸屬帳號</label>
-                        <input type="text" id="ocrAccount" placeholder="例: 0001234567890">
-                    </div>
-                    <div class="form-item">
-                        <label>交易日期</label>
-                        <input type="text" id="ocrDate">
-                    </div>
-                    <div class="form-item">
-                        <label>交易時間</label>
-                        <input type="text" id="ocrTime">
-                    </div>
-                    <div class="form-item">
-                        <label>交易摘要</label>
-                        <input type="text" id="ocrSummary">
-                    </div>
-                    <div class="form-item">
-                        <label>交易金額 (支出請輸入負值)</label>
-                        <input type="number" id="ocrAmount" step="1">
-                    </div>
-                    <div class="form-item">
-                        <label>交易序號</label>
-                        <input type="text" id="ocrRef">
-                    </div>
-                </div>
-
-                <p id="ocrErrorMsg" style="color: var(--danger-color); font-weight: bold; margin-top: 15px; min-height: 1.5em;"></p>
-                
-                <div style="margin-top: 25px; display: flex; flex-direction: column; gap: 10px; padding-bottom: 10px;">
-                    <button id="btnOcrSave" class="btn">確認存入資料庫</button>
-                    <button id="btnOcrCancel" class="btn btn-cancel">取消</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="editModal" class="modal">
-            <div class="modal-content">
-                <h3>✏️ 編輯交易</h3>
-                <input type="hidden" id="editTxId">
-                
-                <div class="ocr-form">
-                    <div class="form-item">
-                        <label>日期</label>
-                        <input type="text" id="editDate">
-                    </div>
-                    <div class="form-item">
-                        <label>時間</label>
-                        <input type="text" id="editTime">
-                    </div>
-                    <div class="form-item">
-                        <label>摘要</label>
-                        <input type="text" id="editSummary">
-                    </div>
-                    <div class="form-item">
-                        <label>金額</label>
-                        <input type="number" id="editAmount" step="1">
-                    </div>
-                    <div class="form-item">
-                        <label>序號</label>
-                        <input type="text" id="editRef">
-                    </div>
-                </div>
-                
-                <div style="margin-top: 20px; display: flex; gap: 10px;">
-                    <button class="btn" onclick="submitEdit()">儲存修改</button>
-                    <button class="btn btn-cancel" onclick="closeEditModal()">取消</button>
-                </div>
-            </div>
-        </div>
-
         <div class="card">
             <h3>最近交易明細</h3>
             <table id="txTable">
@@ -137,6 +52,138 @@
                 </thead>
                 <tbody></tbody>
             </table>
+        </div>
+    </div>
+
+    <div id="pwdModal" class="modal">
+        <div class="modal-content">
+            <h3>輸入 PDF 密碼</h3>
+            <input type="password" id="pdfPwd" placeholder="請輸入密碼">
+            <br>
+            <button id="btnSubmit" class="btn">確認上傳</button>
+            <button id="btnCancel" class="btn btn-cancel">取消</button>
+        </div>
+    </div>
+
+    <div id="ocrModal" class="modal">
+        <div class="modal-content">
+            <h3>🔍 辨識結果校對</h3>
+            <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 20px;">
+                請確認圖片辨識結果，手動修正錯誤項
+            </p>
+            <div class="ocr-form">
+                <div class="form-item">
+                    <label>帳號末 5 碼 (系統自動辨識)</label>
+                    <input type="text" id="ocrAccount" placeholder="例: 12345" maxlength="5">
+                </div>
+                <div class="form-item">
+                    <label>交易日期</label>
+                    <input type="text" id="ocrDate">
+                </div>
+                <div class="form-item">
+                    <label>交易時間</label>
+                    <input type="text" id="ocrTime">
+                </div>
+                <div class="form-item">
+                    <label>交易摘要</label>
+                    <input type="text" id="ocrSummary">
+                </div>
+                <div class="form-item">
+                    <label>交易金額 (支出請輸入負值)</label>
+                    <input type="number" id="ocrAmount" step="1">
+                </div>
+                <div class="form-item">
+                    <label>交易序號</label>
+                    <input type="text" id="ocrRef">
+                </div>
+            </div>
+
+            <p id="ocrErrorMsg" style="color: var(--danger-color); font-weight: bold; margin-top: 15px; min-height: 1.5em;"></p>
+            
+            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px; padding-bottom: 10px;">
+                <button id="btnOcrSave" class="btn">確認存入資料庫</button>
+                <button id="btnOcrCancel" class="btn btn-cancel">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <h3>✏️ 編輯交易</h3>
+            <input type="hidden" id="editTxId">
+            
+            <div class="ocr-form">
+                <div class="form-item">
+                    <label>日期</label>
+                    <input type="text" id="editDate">
+                </div>
+                <div class="form-item">
+                    <label>時間</label>
+                    <input type="text" id="editTime">
+                </div>
+                <div class="form-item">
+                    <label>摘要</label>
+                    <input type="text" id="editSummary">
+                </div>
+                <div class="form-item">
+                    <label>金額</label>
+                    <input type="number" id="editAmount" step="1">
+                </div>
+                <div class="form-item">
+                    <label>序號</label>
+                    <input type="text" id="editRef">
+                </div>
+            </div>
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button class="btn" onclick="submitEdit()">儲存修改</button>
+                <button class="btn btn-cancel" onclick="closeEditModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="accModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <h3>⚙️ 帳戶管理</h3>
+            
+            <div style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+                <table id="accTable">
+                    <thead>
+                        <tr>
+                            <th>暱稱 (ID)</th>
+                            <th>帳號末5碼</th>
+                            <th>餘額</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <hr style="border:0; border-top:1px solid #eee; margin:20px 0;">
+            
+            <h4 style="text-align: left; margin-bottom: 10px; color: var(--text-muted);">➕ 新增 / 編輯帳戶</h4>
+            <input type="hidden" id="accEditId">
+            <div class="ocr-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="form-item">
+                    <label>帳戶暱稱 (唯一識別)</label>
+                    <input type="text" id="accName" placeholder="例: 生活費帳戶">
+                </div>
+                <div class="form-item">
+                    <label>銀行代碼 (必填)</label>
+                    <input type="text" id="accBankCode" placeholder="例: 700">
+                </div>
+                <div class="form-item" style="grid-column: span 2;">
+                    <label>帳號末 5 碼 (僅存5碼)</label>
+                    <input type="text" id="accNumber" maxlength="5" placeholder="例: 12345">
+                </div>
+                <div class="form-item" style="grid-column: span 2;">
+                    <label>初始餘額</label>
+                    <input type="number" id="accInitBalance" value="0">
+                </div>
+            </div>
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button class="btn" onclick="saveAccount()">儲存設定</button>
+                <button class="btn btn-cancel" onclick="closeAccModal()">關閉</button>
+            </div>
         </div>
     </div>
     <script src="/static/app.js?v=3"></script>
