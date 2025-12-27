@@ -68,17 +68,6 @@ async def update_transaction(tx_id: int, payload: dict = Body(...)):
     except Exception as e:
         return {"success": False, "message": str(e)}
 
-# @app.post("/api/upload")
-# async def upload_pdf(file: UploadFile = File(...), password: str = Form(...)):
-#     try:
-#         file_content = await file.read()
-#         pdf_stream = io.BytesIO(file_content)
-#         added, total = parser.parse_and_save(pdf_stream, password)
-#         msg = f"PDF 解析成功：共 {total} 筆，新增 {added} 筆"
-#     except Exception as e:
-#         msg = f"解析失敗: {str(e)}"
-#     return {"message": msg}
-
 @app.post("/api/pdf-preview")
 async def pdf_preview(file: UploadFile = File(...), password: str = Form(...)):
     try:

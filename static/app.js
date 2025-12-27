@@ -457,9 +457,6 @@ async function handleImageUpload(file) {
 btnOcrSave.onclick = saveOcrResult;
 btnOcrCancel.onclick = () => { ocrModal.style.display = 'none'; fileInput.value = ''; };
 
-// btnSubmit.onclick = submitUpload;
-// btnCancel.onclick = closeModal;
-
 pdfPwdInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
         // [關鍵修正] 阻止瀏覽器預設行為 (避免 Enter 同時觸發按鈕點擊)
