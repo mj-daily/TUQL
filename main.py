@@ -68,16 +68,70 @@ async def update_transaction(tx_id: int, payload: dict = Body(...)):
     except Exception as e:
         return {"success": False, "message": str(e)}
 
-@app.post("/api/upload")
-async def upload_pdf(file: UploadFile = File(...), password: str = Form(...)):
+# @app.post("/api/upload")
+# async def upload_pdf(file: UploadFile = File(...), password: str = Form(...)):
+#     try:
+#         file_content = await file.read()
+#         pdf_stream = io.BytesIO(file_content)
+#         added, total = parser.parse_and_save(pdf_stream, password)
+#         msg = f"PDF 解析成功：共 {total} 筆，新增 {added} 筆"
+#     except Exception as e:
+#         msg = f"解析失敗: {str(e)}"
+#     return {"message": msg}
+
+@app.post("/api/pdf-preview")
+async def pdf_preview(file: UploadFile = File(...), password: str = Form(...)):
     try:
-        file_content = await file.read()
-        pdf_stream = io.BytesIO(file_content)
-        added, total = parser.parse_and_save(pdf_stream, password)
-        msg = f"PDF 解析成功：共 {total} 筆，新增 {added} 筆"
+        content = await file.read()
+        pdf_stream = io.BytesIO(content)
+        # 呼叫純解析函數
+        acc_num, txs = parser.parse_pdf(pdf_stream, password)
+        
+        return {
+            "success": True, 
+            "data": {
+                "account_number": acc_num, # 可能是 3 碼或 5 碼
+                "transactions": txs,
+                "count": len(txs)
+            }
+        }
     except Exception as e:
-        msg = f"解析失敗: {str(e)}"
-    return {"message": msg}
+        return {"success": False, "message": f"解析失敗: {str(e)}"}
+    
+@app.post("/api/save-batch")
+async def save_batch(payload: dict = Body(...)):
+    """
+    Payload 結構:
+    {
+        "account_id": 1,
+        "transactions": [ ... ]
+    }
+    """
+    account_id = payload.get("account_id")
+    transactions = payload.get("transactions", [])
+    
+    if not account_id:
+        return {"success": False, "message": "未指定匯入帳戶"}
+
+    saved_count = 0
+    with sqlite3.connect("finance.db") as conn:
+        cursor = conn.cursor()
+        
+        for tx in transactions:
+            # 這裡重新生成 hash，確保綁定的是正確的 account_id
+            raw_id = f"BATCH|{account_id}|{tx['date']}|{tx['time']}|{tx['ref_no']}|{tx['amount']}"
+            t_hash = hashlib.sha256(raw_id.encode()).hexdigest()
+            
+            try:
+                cursor.execute("""
+                    INSERT INTO transactions (account_id, trans_date, trans_time, summary, ref_no, amount, trace_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (account_id, tx['date'], tx['time'], tx['summary'], tx['ref_no'], tx['amount'], t_hash))
+                saved_count += 1
+            except sqlite3.IntegrityError:
+                continue # 忽略重複
+
+    return {"success": True, "message": f"成功匯入 {saved_count} 筆 (共 {len(transactions)} 筆)"}
 
 @app.post("/api/ocr-identify")
 async def ocr_identify(file: UploadFile = File(...)):

@@ -35,21 +35,29 @@ def init_db(db_name="finance.db"):
         );
         """)
 
-def parse_and_save(pdf_source, password, db_name="finance.db"):
-    # pdf_source 現在可以是檔案路徑字串，也可以是 BytesIO 記憶體流
+def parse_pdf(pdf_stream, password):
+    """
+    只負責解析 PDF，回傳帳號字串與交易列表 (不寫入 DB)
+    """
     try:
-        with pdfplumber.open(pdf_source, password=password) as pdf:
+        with pdfplumber.open(pdf_stream, password=password) as pdf:
             full_text = "\n".join([page.extract_text() for page in pdf.pages])
     except Exception as e:
-        # 如果密碼錯誤或 PDF 損壞，pdfplumber 會噴錯
         raise Exception(f"PDF 開啟失敗: {str(e)}")
 
-    # 2. 正則解析 Header 與 Body
-    acc_match = re.search(r"帳\s+號：([\d\*\-]+)", full_text)
+    # [修改] 帳號提取邏輯
+    # 支援： "帳號：12345", "帳號：***345", "帳號 12345"
+    acc_match = re.search(r"帳\s+號[:：\s]*([\d\*\-]+)", full_text)
     raw_acc = acc_match.group(1).strip() if acc_match else "Unknown"
-    account_no_5 = raw_acc[-5:] if len(raw_acc) >= 5 else raw_acc
     
-    # 定義哪些摘要關鍵字屬於「收入」
+    # 移除星號與橫槓，只留數字
+    last_5_acc = raw_acc[-5:] if len(raw_acc) >= 5 else raw_acc
+    account_no_parsed = last_5_acc.replace('*', '').replace('-', '')
+    
+    # 如果只剩 3 碼 (如 345)，就回傳 3 碼；如果有 5 碼以上，截取後 5 碼
+    # 這是為了讓前端可以做 "EndsWith" 的模糊比對
+    # account_no_parsed = raw_acc[-5:] if len(raw_acc) >= 5 else raw_acc
+    
     INCOME_KEYWORDS = ["薪資", "利息", "轉入", "存入", "退款"]
     item_pattern = re.compile(r"(\d{3}/\d{2}/\d{2})\s+(\d{2}:\d{2}:\d{2})\s+(\S+)\s+(.*?)\s+([\d,]+)(?=\n|$)")
     
@@ -57,42 +65,80 @@ def parse_and_save(pdf_source, password, db_name="finance.db"):
     for match in item_pattern.finditer(full_text):
         date, time, summary, ref_no, amount = match.groups()
         amount_val = float(amount.replace(',', ''))
-
-        # 修正正負號邏輯：若非收入關鍵字，預設為支出 (負值)
+        
         if not any(kw in summary for kw in INCOME_KEYWORDS):
             amount_val = -abs(amount_val)
         
-        # 生成唯一雜湊
-        raw_id = f"{account_no_5}|{date}|{time}|{ref_no}|{amount_val}"
-        t_hash = hashlib.sha256(raw_id.encode()).hexdigest()
-        transactions.append((date, time, summary, ref_no.strip(), amount_val, t_hash))
-
-    # 3. 寫入資料庫
-    with sqlite3.connect(db_name) as conn:
-        cursor = conn.cursor()
-        # 嘗試尋找帳戶
-        cursor.execute("SELECT account_id FROM accounts WHERE account_number = ?", (account_no_5,))
-        row = cursor.fetchone()
-        if row:
-            account_id = row[0]
-        else:
-            # 若不存在，建立一個預設帳戶，名稱為「未知帳戶_末5碼」，並指定銀行代碼為 "000"
-            # 使用者可後續再修改帳戶名稱
-            acc_name = f"未知帳戶_{account_no_5}"
-            try:
-                cursor.execute("INSERT INTO accounts (account_name, account_number, bank_code) VALUES (?, ?, ?)", 
-                               (acc_name, account_no_5, "000"))
-                account_id = cursor.lastrowid
-            except sqlite3.IntegrityError:
-                cursor.execute("SELECT account_id FROM accounts WHERE account_name = ?", (acc_name,))
-                account_id = cursor.fetchone()[0]
+        # 注意：這裡暫時不生成 trace_hash，因為 account_id 還沒確定
+        # 我們只回傳原始資料給前端確認
+        transactions.append({
+            "date": date,
+            "time": time,
+            "summary": summary,
+            "ref_no": ref_no.strip(),
+            "amount": amount_val
+        })
         
-        cursor.executemany(f"""
-            INSERT OR IGNORE INTO transactions 
-            (account_id, trans_date, trans_time, summary, ref_no, amount, trace_hash)
-            VALUES ({account_id}, ?, ?, ?, ?, ?, ?)
-        """, transactions)
-        return cursor.rowcount, len(transactions)
+    return account_no_parsed, transactions
+
+# def parse_and_save(pdf_source, password, db_name="finance.db"):
+#     # pdf_source 現在可以是檔案路徑字串，也可以是 BytesIO 記憶體流
+#     try:
+#         with pdfplumber.open(pdf_source, password=password) as pdf:
+#             full_text = "\n".join([page.extract_text() for page in pdf.pages])
+#     except Exception as e:
+#         # 如果密碼錯誤或 PDF 損壞，pdfplumber 會噴錯
+#         raise Exception(f"PDF 開啟失敗: {str(e)}")
+
+#     # 2. 正則解析 Header 與 Body
+#     acc_match = re.search(r"帳\s+號：([\d\*\-]+)", full_text)
+#     raw_acc = acc_match.group(1).strip() if acc_match else "Unknown"
+#     account_no_5 = raw_acc[-5:] if len(raw_acc) >= 5 else raw_acc
+    
+#     # 定義哪些摘要關鍵字屬於「收入」
+#     INCOME_KEYWORDS = ["薪資", "利息", "轉入", "存入", "退款"]
+#     item_pattern = re.compile(r"(\d{3}/\d{2}/\d{2})\s+(\d{2}:\d{2}:\d{2})\s+(\S+)\s+(.*?)\s+([\d,]+)(?=\n|$)")
+    
+#     transactions = []
+#     for match in item_pattern.finditer(full_text):
+#         date, time, summary, ref_no, amount = match.groups()
+#         amount_val = float(amount.replace(',', ''))
+
+#         # 修正正負號邏輯：若非收入關鍵字，預設為支出 (負值)
+#         if not any(kw in summary for kw in INCOME_KEYWORDS):
+#             amount_val = -abs(amount_val)
+        
+#         # 生成唯一雜湊
+#         raw_id = f"{account_no_5}|{date}|{time}|{ref_no}|{amount_val}"
+#         t_hash = hashlib.sha256(raw_id.encode()).hexdigest()
+#         transactions.append((date, time, summary, ref_no.strip(), amount_val, t_hash))
+
+#     # 3. 寫入資料庫
+#     with sqlite3.connect(db_name) as conn:
+#         cursor = conn.cursor()
+#         # 嘗試尋找帳戶
+#         cursor.execute("SELECT account_id FROM accounts WHERE account_number = ?", (account_no_5,))
+#         row = cursor.fetchone()
+#         if row:
+#             account_id = row[0]
+#         else:
+#             # 若不存在，建立一個預設帳戶，名稱為「未知帳戶_末5碼」，並指定銀行代碼為 "000"
+#             # 使用者可後續再修改帳戶名稱
+#             acc_name = f"未知帳戶_{account_no_5}"
+#             try:
+#                 cursor.execute("INSERT INTO accounts (account_name, account_number, bank_code) VALUES (?, ?, ?)", 
+#                                (acc_name, account_no_5, "000"))
+#                 account_id = cursor.lastrowid
+#             except sqlite3.IntegrityError:
+#                 cursor.execute("SELECT account_id FROM accounts WHERE account_name = ?", (acc_name,))
+#                 account_id = cursor.fetchone()[0]
+        
+#         cursor.executemany(f"""
+#             INSERT OR IGNORE INTO transactions 
+#             (account_id, trans_date, trans_time, summary, ref_no, amount, trace_hash)
+#             VALUES ({account_id}, ?, ?, ?, ?, ?, ?)
+#         """, transactions)
+#         return cursor.rowcount, len(transactions)
 
 def preprocess_image(image_bytes):
     """

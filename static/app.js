@@ -18,9 +18,14 @@ const ocrErrorMsg = document.getElementById('ocrErrorMsg');
 const editModal = document.getElementById('editModal');
 const accModal = document.getElementById('accModal');
 
+// PDF 確認匯入彈窗元素
+const pdfConfirmModal = document.getElementById('pdfConfirmModal');
+
 // 全域變數，存儲所有交易資料 (方便前端篩選，不用一直 call API)
 let allTransactions = [];
 let currentFilterAccountId = null; // null 代表顯示全部
+let pendingPdfTransactions = []; // 暫存 PDF 解析出來的交易資料
+let isPdfUploading = false; // 防止重複上傳
 
 // 初始化
 document.addEventListener('DOMContentLoaded', async () => {
@@ -298,25 +303,126 @@ pdfPwdInput.addEventListener("keydown", (e) => {
 });
 
 async function submitPdfUpload() {
-    const file = fileInput.files[0];
-    const password = pdfPwdInput.value;
+    if (isPdfUploading) return;
 
-    if (!password) return alert("請輸入密碼");
+    const password = pdfPwdInput.value;
+    if (!password) return alert("請輸入密碼"); // 簡易防呆
+
+    isPdfUploading = true;
+
+    btnSubmit.disabled = true;
+    btnSubmit.innerText = "⏳ 處理中...";
 
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('password', password);
+    formData.append('file', fileInput.files[0]);
+    formData.append('password', pdfPwdInput.value);
     
     pwdModal.style.display = 'none';
     statusMsg.innerText = "正在解析 PDF...";
 
     try {
-        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        // 1. 呼叫預覽 API
+        const res = await fetch('/api/pdf-preview', { method: 'POST', body: formData });
         const result = await res.json();
-        statusMsg.innerText = result.message;
-        await fetchTransactions(); 
+        
+        if (result.success) {
+            statusMsg.innerText = "✅ 解析完成，請確認歸戶";
+            openPdfConfirmModal(result.data);
+        } else {
+            statusMsg.innerText = "❌ " + result.message;
+        }
     } catch (err) {
-        statusMsg.innerText = "PDF 上傳失敗";
+        statusMsg.innerText = "連線錯誤";
+    } finally {
+        // 3. 解除鎖定 (無論成功失敗都要解除，並恢復按鈕)
+        isPdfUploading = false;
+        btnSubmit.disabled = false;
+        btnSubmit.innerText = "確認上傳";
+    }
+}
+
+async function openPdfConfirmModal(data) {
+    pendingPdfTransactions = data.transactions;
+    
+    // UI 顯示偵測結果
+    document.getElementById('pdfDetectedAcc').innerText = data.account_number || "未知";
+    document.getElementById('pdfTxCount').innerText = `共 ${data.count} 筆交易`;
+
+    // 準備下拉選單
+    const select = document.getElementById('pdfTargetAccount');
+    select.innerHTML = '<option value="">-- 請選擇歸戶帳戶 --</option>';
+    
+    // 取得最新帳戶列表 (為了確保資料同步，這裡可以再 fetch 一次，或者用全域變數)
+    const res = await fetch('/api/accounts');
+    const accounts = await res.json();
+    
+    let matchedId = "";
+
+    accounts.forEach(acc => {
+        const option = document.createElement('option');
+        option.value = acc.account_id;
+        // 顯示格式： 暱稱 (末5碼) - 銀行代碼
+        option.text = `${acc.account_name} (${acc.account_number}) - ${acc.bank_code}`;
+        select.appendChild(option);
+
+        // [關鍵邏輯] 自動匹配
+        // 如果 PDF 偵測到的號碼 (例如 "345") 是帳戶號碼 (例如 "12345") 的結尾
+        if (data.account_number && acc.account_number.endsWith(data.account_number)) {
+            matchedId = acc.account_id;
+        }
+    });
+
+    // 如果有匹配到，自動選取
+    if (matchedId) {
+        select.value = matchedId;
+    }
+
+    pdfConfirmModal.style.display = 'block';
+}
+
+function closePdfConfirmModal() {
+    pdfConfirmModal.style.display = 'none';
+    fileInput.value = '';
+    pendingPdfTransactions = [];
+}
+
+async function savePdfBatch() {
+    const accountId = document.getElementById('pdfTargetAccount').value;
+    
+    if (!accountId) {
+        alert("請選擇一個匯入目標帳戶！若無帳戶請先至「帳戶管理」新增。");
+        return;
+    }
+
+    const btn = document.getElementById('btnPdfSave');
+    btn.innerText = "⏳ 匯入中..."; btn.disabled = true;
+
+    try {
+        const payload = {
+            account_id: parseInt(accountId),
+            transactions: pendingPdfTransactions
+        };
+
+        const res = await fetch('/api/save-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+            closePdfConfirmModal();
+            statusMsg.innerText = "✅ " + result.message;
+            fetchAccounts();     // 更新餘額
+            fetchTransactions(); // 更新列表
+        } else {
+            alert("匯入失敗: " + result.message);
+        }
+    } catch (e) {
+        alert("連線錯誤");
+    } finally {
+        btn.innerText = "確認匯入"; btn.disabled = false;
     }
 }
 
@@ -355,7 +461,11 @@ btnOcrCancel.onclick = () => { ocrModal.style.display = 'none'; fileInput.value 
 // btnCancel.onclick = closeModal;
 
 pdfPwdInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") submitPdfUpload();
+    if (e.key === "Enter") {
+        // [關鍵修正] 阻止瀏覽器預設行為 (避免 Enter 同時觸發按鈕點擊)
+        e.preventDefault(); 
+        submitPdfUpload(); 
+    }
     if (e.key === "Escape") closeModal();
 });
 
