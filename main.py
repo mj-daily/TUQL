@@ -1,4 +1,5 @@
 #%% main.py
+from typing import List
 from fastapi import FastAPI, UploadFile, File, Form, Body
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -123,14 +124,24 @@ async def save_batch(payload: dict = Body(...)):
     return {"success": True, "message": f"成功匯入 {saved_count} 筆 (共 {len(transactions)} 筆)"}
 
 @app.post("/api/ocr-identify")
-async def ocr_identify(file: UploadFile = File(...)):
-    try:
-        content = await file.read()
-        # 呼叫 parser 裡的 EasyOCR 邏輯
-        data = parser.recognize_screenshot(content)
-        return {"success": True, "data": data}
-    except Exception as e:
-        return {"success": False, "message": str(e)}
+async def ocr_identify(files: List[UploadFile] = File(...)):
+    results = []
+    errors = []
+    for file in files:
+        try:
+            content = await file.read()
+            data = parser.recognize_screenshot(content)
+            results.append(data)
+        except Exception as e:
+            errors.append(f"{file.filename}: {str(e)}")
+    if not results and errors:
+        return {"success": False, "message": "; ".join(errors)}
+        
+    return {
+        "success": True, 
+        "data": results,
+        "errors": errors # 回傳部分失敗的訊息供前端參考
+    }
 
 @app.post("/api/save-manual")
 async def save_manual(payload: dict = Body(...)):

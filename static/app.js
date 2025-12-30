@@ -13,6 +13,8 @@ const ocrModal = document.getElementById('ocrModal');
 const btnOcrSave = document.getElementById('btnOcrSave');
 const btnOcrCancel = document.getElementById('btnOcrCancel');
 const ocrErrorMsg = document.getElementById('ocrErrorMsg');
+const ocrBatchModal = document.getElementById('ocrBatchModal');
+const ocrBatchList = document.getElementById('ocrBatchList');
 
 // 編輯交易彈窗元素
 const editModal = document.getElementById('editModal');
@@ -282,14 +284,19 @@ async function submitEdit() {
 
 // --- PDF & OCR 上傳 ---
 fileInput.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (file.type === "application/pdf") {
+    const files = e.target.files;
+    if (files.length === 0) return;
+
+    // 判斷邏輯：如果是 PDF (通常一次傳一個)，走舊流程
+    // 如果是圖片 (可能多張)，走新流程
+    if (files[0].type === "application/pdf") {
+        if (files.length > 1) alert("PDF 請逐一上傳，目前僅支援單檔解析");
         pwdModal.style.display = 'block';
         pdfPwdInput.value = '';
         pdfPwdInput.focus();
-    } else if (file.type.startsWith("image/")) {
-        await handleImageUpload(file);
+    } else if (files[0].type.startsWith("image/")) {
+        // [修改] 改為呼叫批次處理
+        await handleBatchImageUpload(files);
     } else {
         alert("不支援的檔案格式");
     }
@@ -426,30 +433,202 @@ async function savePdfBatch() {
     }
 }
 
-async function handleImageUpload(file) {
+// --- 新增：批次圖片處理函數 ---
+async function handleBatchImageUpload(files) {
     const formData = new FormData();
-    formData.append('file', file);
+    // 務必確認這裡的 key 是 'files' (複數)，對應後端的 files 參數
+    for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+    }
     
-    statusMsg.innerText = "⏳ 正在進行 OCR 辨識...";
+    statusMsg.innerText = `⏳ 正在辨識 ${files.length} 張圖片...`;
     
     try {
         const res = await fetch('/api/ocr-identify', { method: 'POST', body: formData });
+        
+        // 1. 針對 HTTP 錯誤狀態碼進行細分處理
+        if (!res.ok) {
+            let errorDetail = "";
+            try {
+                // 嘗試解析後端回傳的錯誤詳情 (FastAPI 通常放在 'detail' 欄位)
+                const errJson = await res.json();
+                errorDetail = JSON.stringify(errJson.detail || errJson);
+            } catch (e) {
+                errorDetail = res.statusText;
+            }
+
+            if (res.status === 422) {
+                statusMsg.innerText = "❌ 參數錯誤 (422)：前後端參數名稱不符 (file vs files)。請清除瀏覽器快取。";
+            } else if (res.status === 500) {
+                statusMsg.innerText = "❌ 伺服器錯誤 (500)：請檢查 main.py 是否有 'from typing import List'";
+            } else {
+                statusMsg.innerText = `❌ 請求失敗 (${res.status})：${errorDetail}`;
+            }
+            console.error("API Error:", errorDetail);
+            return;
+        }
+
+        // 2. 處理成功回應 (HTTP 200)
         const result = await res.json();
         
         if (result.success) {
             statusMsg.innerText = "✅ 辨識完成，請校對資料";
-            document.getElementById('ocrAccount').value = result.data.account_number || "";
-            document.getElementById('ocrDate').value = result.data.date;
-            document.getElementById('ocrTime').value = result.data.time;
-            document.getElementById('ocrSummary').value = result.data.summary;
-            document.getElementById('ocrAmount').value = result.data.amount;
-            document.getElementById('ocrRef').value = result.data.ref_no;
-            ocrModal.style.display = 'block';
+            openOcrBatchModal(result.data);
         } else {
-            statusMsg.innerText = "❌ 辨識失敗：" + result.message;
+            // 防止 result.message 為 undefined
+            const msg = result.message || JSON.stringify(result);
+            statusMsg.innerText = "❌ 辨識失敗：" + msg;
         }
     } catch (err) {
-        statusMsg.innerText = "連線錯誤";
+        console.error(err);
+        statusMsg.innerText = "❌ 連線錯誤 (請檢查終端機是否有報錯)";
+    }
+}
+// 開啟批次預覽視窗
+async function openOcrBatchModal(items) {
+    // 1. 準備帳戶下拉選單 (類似 PDF 邏輯)
+    const select = document.getElementById('ocrBatchAccount');
+    select.innerHTML = '<option value="">-- 請選擇歸戶帳戶 --</option>';
+    
+    const res = await fetch('/api/accounts');
+    const accounts = await res.json();
+    
+    // 如果系統內完全沒有帳戶，顯示提示
+    if (accounts.length === 0) {
+        alert("系統目前無任何帳戶，請先至「帳戶管理」建立帳戶後再匯入。");
+        // 也可以在這裡直接導向 openAccModal()
+        return; 
+    }
+
+    let detectedAccNum = null;
+
+    // 嘗試從第一筆 OCR 資料中抓帳號 (作為預設選項)
+    if (items.length > 0 && items[0].account_number) {
+        detectedAccNum = items[0].account_number;
+    }
+
+    let matchedId = "";
+    accounts.forEach(acc => {
+        const option = document.createElement('option');
+        option.value = acc.account_id;
+        option.text = `${acc.account_name} (${acc.account_number}) - ${acc.bank_code}`;
+        select.appendChild(option);
+        
+        // 自動匹配 (比對末5碼)
+        if (detectedAccNum && acc.account_number.endsWith(detectedAccNum)) {
+            matchedId = acc.account_id;
+        }
+    });
+    if (matchedId) select.value = matchedId;
+
+    // 2. 渲染交易卡片列表
+    ocrBatchList.innerHTML = ''; // 清空舊資料
+    items.forEach((item, index) => {
+        const card = createOcrCard(item, index);
+        ocrBatchList.appendChild(card);
+    });
+
+    ocrBatchModal.style.display = 'block';
+}
+
+function closeOcrBatchModal() {
+    ocrBatchModal.style.display = 'none';
+    fileInput.value = '';
+}
+
+// 建立單張卡片的 HTML
+function createOcrCard(item, index) {
+    const div = document.createElement('div');
+    div.className = 'ocr-card';
+    div.dataset.index = index; // 用於標記
+
+    // 刪除按鈕
+    div.innerHTML = `
+        <button class="ocr-card-del" onclick="removeOcrCard(this)" title="移除此筆">✕</button>
+        <div class="ocr-grid">
+            <div>
+                <label>日期</label>
+                <input type="text" class="inp-date" value="${item.date || ''}" placeholder="YYYY/MM/DD">
+            </div>
+            <div>
+                <label>時間</label>
+                <input type="text" class="inp-time" value="${item.time || ''}" placeholder="HH:MM:SS">
+            </div>
+            <div class="ocr-full-width">
+                <label>摘要</label>
+                <input type="text" class="inp-summary" value="${item.summary || ''}">
+            </div>
+            <div>
+                <label>金額 (支出為負)</label>
+                <input type="number" class="inp-amount" value="${item.amount || 0}">
+            </div>
+            <div>
+                <label>交易序號</label>
+                <input type="text" class="inp-ref" value="${item.ref_no || ''}">
+            </div>
+        </div>
+    `;
+    return div;
+}
+
+// 移除卡片
+window.removeOcrCard = function(btn) {
+    const card = btn.closest('.ocr-card');
+    card.remove();
+};
+
+// 確認全部匯入
+async function saveOcrBatch() {
+    const accountId = document.getElementById('ocrBatchAccount').value;
+    if (!accountId) return alert("請選擇匯入目標帳戶！");
+
+    const cards = document.querySelectorAll('.ocr-card');
+    if (cards.length === 0) return alert("沒有可匯入的交易資料");
+
+    // 收集資料
+    const transactions = [];
+    cards.forEach(card => {
+        const date = card.querySelector('.inp-date').value;
+        const time = card.querySelector('.inp-time').value;
+        const summary = card.querySelector('.inp-summary').value;
+        const amount = parseFloat(card.querySelector('.inp-amount').value);
+        const ref_no = card.querySelector('.inp-ref').value;
+
+        // 簡單驗證
+        if (date && !isNaN(amount)) {
+            transactions.push({ date, time, summary, amount, ref_no });
+        }
+    });
+
+    const btn = document.getElementById('btnBatchSave');
+    btn.innerText = "⏳ 匯入中..."; btn.disabled = true;
+
+    try {
+        // 重用 PDF 的批次儲存 API
+        const payload = {
+            account_id: parseInt(accountId),
+            transactions: transactions
+        };
+
+        const res = await fetch('/api/save-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+
+        if (result.success) {
+            closeOcrBatchModal();
+            statusMsg.innerText = "✅ " + result.message;
+            fetchTransactions();
+            fetchAccounts();
+        } else {
+            alert("匯入失敗: " + result.message);
+        }
+    } catch (e) {
+        alert("連線錯誤");
+    } finally {
+        btn.innerText = "確認全部匯入"; btn.disabled = false;
     }
 }
 

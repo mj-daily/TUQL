@@ -88,6 +88,61 @@ h1 { font-weight: 700; color: var(--text-main); margin-bottom: 30px; display: fl
     border-color: var(--primary-color);
 }
 
+/* 批次 OCR 的單筆卡片 */
+.ocr-card {
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    position: relative;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    text-align: left;
+    transition: transform 0.2s;
+}
+.ocr-card:hover {
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+}
+.ocr-card-del {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #fee2e2;
+    color: var(--danger-color);
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ocr-card-del:hover { background: #fecaca; }
+.ocr-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.ocr-full-width {
+    grid-column: span 2;
+}
+.ocr-grid label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.ocr-grid input {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 0.95rem;
+}
+
 /* Modal 彈窗 */
 .modal {
     display: none;
