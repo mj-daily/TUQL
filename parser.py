@@ -113,48 +113,27 @@ def recognize_screenshot(image_bytes):
         paragraph=True,
         add_margin=0.2
     )
-    full_text = " ".join(result)
-    print("OCR 辨識結果：", full_text)  # 除錯用
+    full_text = " ".join(result).split("交易") # 以 "交易" 分割為三段
     
     # --- 資料提取邏輯 ---
     
     # [帳號] 抓取 "帳號" 最後 5 碼
-    acc_match = re.search(r"(?:帳號|轉出帳號)[:：\s]*[\d\*]*(\d{5})", full_text)
-    account_number = acc_match.group(1) if acc_match else ""
+    account_match = re.search(r"帳\s*號\s*[\*\d\-]*?(\d{5})", full_text[0])
+    account_number = account_match.group(1) if account_match else ""
 
-    # [序號] 使用錨點定位 (Anchor: 交易資訊/交易序號)
-    # 找關鍵字後面接的 5碼以上英數字
-    ref_match = re.search(r"(?:交易資訊|交易序號|附言)[:：\s]*([A-Z0-9-]{5,})", full_text)
-    final_ref = ref_match.group(1) if ref_match else "IMG_IMPORT"
+    # [序號] 抓取 "資訊" 後的編號
+    final_ref = full_text[2].split()[1]
     
-    # [金額] 優先找千分位逗號
-    comma_matches = re.findall(r"(?<![\d.])(\d{1,3}(?:,\d{3})+(?:\.\d+)?)", full_text)
-    amount_val = 0.0
-    if comma_matches:
-        best_match = max(comma_matches, key=len)
-        amount_val = float(best_match.replace(',', ''))
-    else:
-        # 備用：找關鍵字後的數字
-        kw_amount = re.search(r"(?:金額|薪\s*資|存入|支出|NT\$)[^0-9\-]*([-\d]+(?:\.\d+)?)", full_text)
-        if kw_amount:
-            try: amount_val = float(kw_amount.group(1))
-            except: pass
+    # [金額] 抓取 full_text[0] 最後一組數字
+    amount_val = full_text[0].split()[-1]
+    amount_val = float(amount_val.replace(',', ''))
 
     # [日期] & [時間]
-    date_match = re.search(r"(\d{3}/\d{2}/\d{2})", full_text)
-    time_match = re.search(r"(\d{2}:\d{2}:\d{2})", full_text)
+    date_match = re.search(r"(\d{3}/\d{2}/\d{2})", full_text[1])
+    time_match = re.search(r"(\d{2}:\d{2}:\d{2})", full_text[1])
     
-    # [摘要] 根據關鍵字判斷
-    summary = "單筆匯入"
-    if "薪" in full_text and "資" in full_text:
-        summary = "薪資"
-        amount_val = abs(amount_val)
-    elif "提款" in full_text:
-        summary = "提款"
-        amount_val = -abs(amount_val)
-    elif "轉帳" in full_text:
-        summary = "轉帳"
-        amount_val = -abs(amount_val)
+    # [摘要] 剝離 "帳號" 後，取 full_text[0] 中的所有中文字作為摘要
+    summary = "".join(re.findall(r"[\u4e00-\u9fff]", full_text[0].replace("帳號", "")))
 
     return {
         "date": date_match.group(1) if date_match else "",
