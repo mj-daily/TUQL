@@ -89,10 +89,7 @@ def preprocess_image(image_bytes):
     # 這步是關鍵：它會增強局部細節，讓 G 的中間橫槓更明顯，避免被誤認為 6
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     enhanced_img = clahe.apply(gray)
-    
-    # (可選) 二值化：若背景真的很雜，可開啟下面這行
-    # _, binary_img = cv2.threshold(enhanced_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    
+
     return enhanced_img
 
 def recognize_screenshot(image_bytes):
@@ -132,8 +129,8 @@ def recognize_screenshot(image_bytes):
     date_match = re.search(r"(\d{3}/\d{2}/\d{2})", full_text[1])
     time_match = re.search(r"(\d{2}:\d{2}:\d{2})", full_text[1])
     
-    # [摘要] 剝離 "帳號" 後，取 full_text[0] 中的所有中文字作為摘要
-    summary = "".join(re.findall(r"[\u4e00-\u9fff]", full_text[0].replace("帳號", "")))
+    # [摘要] 剝離 "帳號" 後，取 full_text[0] 中的所有中英文字作為摘要
+    summary = "".join(re.findall(r"[\u4e00-\u9fff\u0041-\u005A\u0061-\u007A]", full_text[0].replace("帳號", "")))
 
     return {
         "date": date_match.group(1) if date_match else "",

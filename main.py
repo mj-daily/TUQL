@@ -258,8 +258,44 @@ async def delete_account(acc_id: int):
             return {"success": True}
     except Exception as e:
         return {"success": False, "message": str(e)}
+    
+# [新增] 檢查重複 API
+@app.post("/api/check-duplicates")
+async def check_duplicates(payload: dict = Body(...)):
+    """
+    Payload: { "account_id": 1, "transactions": [ ... ] }
+    回傳: [true, false, true...] (對應每一筆是否重複)
+    """
+    account_id = payload.get("account_id")
+    transactions = payload.get("transactions", [])
+    
+    if not account_id:
+        return {"success": False, "message": "未指定帳戶"}
+
+    results = []
+    
+    with sqlite3.connect("finance.db") as conn:
+        cursor = conn.cursor()
+        
+        for tx in transactions:
+            # 使用與 save-batch 完全相同的 Hash 邏輯
+            # 注意：必須確保欄位都存在，若無則給空字串
+            date = tx.get('date', '')
+            time = tx.get('time', '')
+            ref_no = tx.get('ref_no', '')
+            amount = tx.get('amount', 0)
+            
+            raw_id = f"BATCH|{account_id}|{date}|{time}|{ref_no}|{amount}"
+            t_hash = hashlib.sha256(raw_id.encode()).hexdigest()
+            
+            # 查詢雜湊是否存在
+            cursor.execute("SELECT 1 FROM transactions WHERE trace_hash = ?", (t_hash,))
+            exists = cursor.fetchone() is not None
+            results.append(exists)
+
+    return {"success": True, "duplicates": results}
 
 #%%
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8888)
