@@ -328,3 +328,87 @@ td { padding: 16px 8px; border-bottom: 1px solid var(--border-color); font-size:
 tr:hover { background-color: #f1f5f9; }
 
 input[type="password"], input[type="file"] { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; }
+
+/* 卡片標題列 (讓標題與切換按鈕並排) */
+.card-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+/* 檢視模式切換按鈕 (Segmented Control 風格) */
+.view-toggle {
+    display: flex;
+    background: #f1f5f9;
+    padding: 4px;
+    border-radius: 8px;
+}
+.toggle-btn {
+    border: none;
+    background: transparent;
+    padding: 6px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    transition: all 0.2s;
+}
+.toggle-btn.active {
+    background: white;
+    color: var(--primary-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* 月份篩選列 */
+.month-filter-bar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    background: #f8fafc;
+    padding: 10px;
+    border-radius: 8px;
+}
+.month-filter-bar input[type="month"] {
+    border: 1px solid var(--border-color);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 1rem;
+    background: white;
+}
+.btn-text {
+    border: none;
+    background: transparent;
+    color: var(--primary-color);
+    font-size: 0.85rem;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+/* 統計表格樣式 */
+.stats-section h4 {
+    margin: 0 0 10px 0;
+    padding-left: 8px;
+    border-left: 4px solid currentColor;
+}
+.stats-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.stats-table th {
+    background: #f8fafc;
+    padding: 10px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-align: left;
+}
+.stats-table td {
+    padding: 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+/* 最後一行不畫線 */
+.stats-table tr:last-child td { border-bottom: none; }

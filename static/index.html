@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>My Finance Dash</title>
-    <link rel="stylesheet" href="/static/style.css?v=11">
+    <link rel="stylesheet" href="/static/style.css?v=12">
 </head>
 <body>
     <div class="container">
@@ -40,18 +40,56 @@
         </div>
 
         <div class="card">
-            <h3>最近交易明細</h3>
-            <table id="txTable">
-                <thead>
-                    <tr>
-                        <th>日期</th>
-                        <th>摘要</th>
-                        <th>金額</th>
-                        <th>序號/轉入帳號</th>
-                        <th style="width: 100px;">操作</th> </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+            <div class="card-header-row">
+                <h3>交易紀錄</h3>
+                <div class="view-toggle">
+                    <button class="toggle-btn active" onclick="switchView('details')" id="btnViewDetails">明細</button>
+                    <button class="toggle-btn" onclick="switchView('stats')" id="btnViewStats">統計</button>
+                </div>
+            </div>
+
+            <div class="month-filter-bar">
+                <button class="btn-icon" onclick="changeMonth(-1)" title="上個月">◀</button>
+                <input type="month" id="monthPicker" onchange="handleMonthChange()">
+                <button class="btn-icon" onclick="changeMonth(1)" title="下個月">▶</button>
+                <button class="btn-text" onclick="resetToCurrentMonth()">回本月</button>
+            </div>
+
+            <div id="view-details">
+                <table id="txTable">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>摘要</th>
+                            <th>金額</th>
+                            <th>序號/轉入帳號</th>
+                            <th style="width: 100px;">操作</th> 
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <div id="noDataMsg" style="display:none; text-align:center; padding:20px; color:#888;">
+                    本月尚無交易紀錄
+                </div>
+            </div>
+
+            <div id="view-stats" style="display: none;">
+                <div class="stats-section">
+                    <h4 class="amount-pos">💰 收入統計</h4>
+                    <table class="stats-table" id="statsTableIncome">
+                        <thead><tr><th>摘要項目</th><th>筆數</th><th style="text-align:right">總金額</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                
+                <div class="stats-section" style="margin-top: 20px;">
+                    <h4 class="amount-neg">💸 支出統計</h4>
+                    <table class="stats-table" id="statsTableExpense">
+                        <thead><tr><th>摘要項目</th><th>筆數</th><th style="text-align:right">總金額</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -241,6 +279,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=11"></script>
+    <script src="/static/app.js?v=17"></script>
 </body>
 </html>

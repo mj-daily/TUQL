@@ -49,12 +49,37 @@ let allTransactions = [];
 let currentFilterAccountId = null; // null 代表顯示全部
 let pendingPdfTransactions = []; // 暫存 PDF 解析出來的交易資料
 let isPdfUploading = false; // 防止重複上傳
+let currentYearMonth = ""; // 格式 "YYYY-MM"
+let currentView = "details"; // "details" or "stats"
 
 // 初始化
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchAccounts();     // 先載入帳戶
     await fetchTransactions(); // 再載入交易
 });
+
+// [新增] 日期正規化工具：自動將民國年 (3碼) 轉為西元年 (4碼)
+function normalizeDate(dateStr) {
+    if (!dateStr) return "";
+    
+    // 移除空白並以非數字字元分割 (支援 112/01/01, 112-01-01, 112.01.01)
+    const parts = dateStr.replace(/[^\d]/g, '/').split('/');
+    
+    if (parts.length >= 3) {
+        let year = parseInt(parts[0], 10);
+        const month = parts[1].padStart(2, '0');
+        const day = parts[2].padStart(2, '0');
+        
+        // 判斷邏輯：若年份小於 1911 (通常是 2 或 3 碼)，則視為民國年
+        // 例如 112 -> 2023
+        if (year < 1911) {
+            year += 1911;
+        }
+        
+        return `${year}/${month}/${day}`;
+    }
+    return dateStr; // 若格式無法解析，回傳原值
+}
 
 // --- 帳戶管理功能 (Phase 1) ---
 function openAccModal() {
@@ -194,14 +219,34 @@ function filterByAccount(accountId) {
     // 這裡可以用 event.currentTarget 來加 active，或重新 render fetchAccounts (較簡單但較慢)
     // 為了效能，我們直接重新 fetchAccounts 其實也很快，因為它會重新計算餘額
     fetchAccounts();
-    renderTable(); // 重新渲染表格
+    renderCurrentView(); // [修改] 改為呼叫通用渲染函式
 }
 
 // --- 交易列表 ---
 async function fetchTransactions() {
     const res = await fetch('/api/transactions');
-    allTransactions = await res.json(); // 存入全域變數
-    renderTable(); // 執行渲染
+    const rawData = await res.json();
+    // [修改] 載入時將所有日期正規化，確保月份篩選器 (2025-01) 能匹配到資料
+    allTransactions = rawData.map(tx => ({
+        ...tx,
+        trans_date: normalizeDate(tx.trans_date)
+    }));
+    // 前端重新排序 (修正混雜民國年導致的 DB 排序錯誤)
+    allTransactions.sort((a, b) => {
+        // 先比日期 (降序)
+        if (b.trans_date !== a.trans_date) {
+            return b.trans_date.localeCompare(a.trans_date);
+        }
+        // 再比時間 (降序)
+        return (b.trans_time || "").localeCompare(a.trans_time || "");
+    });
+    // 如果是第一次載入 (currentYearMonth 為空)，執行月份初始化
+    if (!currentYearMonth) {
+        initMonthPicker();
+    }
+    
+    // 根據當前模式渲染畫面
+    renderCurrentView();
 }
 
 function renderTable() {
@@ -370,7 +415,11 @@ async function submitPdfUpload() {
 }
 
 async function openPdfConfirmModal(data) {
-    pendingPdfTransactions = data.transactions;
+    // [修改] 在接收資料時，先遍歷並正規化日期
+    pendingPdfTransactions = data.transactions.map(tx => ({
+        ...tx,
+        date: normalizeDate(tx.date) // 轉為西元年
+    }));
     
     // UI 顯示偵測結果
     document.getElementById('pdfDetectedAcc').innerText = data.account_number || "未知";
@@ -512,6 +561,17 @@ async function openOcrBatchModal(items) {
 
     // 渲染卡片
     renderBatchCards(items);
+
+    items.forEach(item => {
+        item.date = normalizeDate(item.date); // [新增] 正規化日期
+    });
+
+    // 清空並重新渲染 (確保顯示的是西元年)
+    ocrBatchList.innerHTML = '';
+    items.forEach((item, index) => {
+        const card = createOcrCard(item, index);
+        ocrBatchList.appendChild(card);
+    });
 
     // [新增] 綁定事件：當帳戶改變時，重新檢查重複
     // 先移除舊的監聽器以免重複綁定
@@ -759,3 +819,204 @@ async function saveOcrResult() {
 
 // 初始化載入
 document.addEventListener('DOMContentLoaded', fetchTransactions);
+
+// ==========================================
+//  新增功能：月報表篩選與統計模式
+// ==========================================
+
+// --- 1. 月份篩選邏輯 ---
+
+function initMonthPicker() {
+    const today = new Date();
+    const currentYM = formatDateYM(today); // "2025-01"
+    
+    // 檢查當前月份是否有資料 (正確比對日期格式)
+    const hasDataCurrentMonth = allTransactions.some(tx => {
+        const txYearMonth = tx.trans_date.substring(0, 4) + '-' + tx.trans_date.substring(5, 7);
+        return txYearMonth === currentYM;
+    });
+    
+    if (hasDataCurrentMonth || allTransactions.length === 0) {
+        currentYearMonth = currentYM;
+    } else {
+        // 若本月無資料，找最近一個有資料的月份
+        // allTransactions 已依日期排序 (DESC)，取第一筆的年月
+        const lastTxDate = allTransactions[0].trans_date;
+        currentYearMonth = lastTxDate.substring(0, 4) + '-' + lastTxDate.substring(5, 7);
+    }
+    
+    document.getElementById('monthPicker').value = currentYearMonth;
+}
+
+function formatDateYM(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
+}
+
+function handleMonthChange() {
+    currentYearMonth = document.getElementById('monthPicker').value;
+    renderCurrentView();
+}
+
+function changeMonth(step) {
+    const [y, m] = currentYearMonth.split('-');
+    const date = new Date(parseInt(y), parseInt(m) - 1 + step, 1);
+    
+    currentYearMonth = formatDateYM(date);
+    document.getElementById('monthPicker').value = currentYearMonth;
+    renderCurrentView();
+}
+
+function resetToCurrentMonth() {
+    const today = new Date();
+    currentYearMonth = formatDateYM(today);
+    document.getElementById('monthPicker').value = currentYearMonth;
+    renderCurrentView();
+}
+
+// 取得當前篩選條件下的資料 (帳戶 + 月份)
+function getFilteredTransactions() {
+    return allTransactions.filter(tx => {
+        // 1. 帳戶篩選
+        const matchAccount = currentFilterAccountId === null || tx.account_id === currentFilterAccountId;
+        // 2. 月份篩選 (將 "2025/12/31" 轉為 "2025-12" 後比對)
+        const txYearMonth = tx.trans_date.substring(0, 4) + '-' + tx.trans_date.substring(5, 7);
+        const matchMonth = txYearMonth === currentYearMonth;
+        
+        return matchAccount && matchMonth;
+    });
+}
+
+// --- 2. 視圖切換與渲染 ---
+
+function switchView(view) {
+    currentView = view;
+    
+    // UI 按鈕狀態更新
+    document.getElementById('btnViewDetails').classList.toggle('active', view === 'details');
+    document.getElementById('btnViewStats').classList.toggle('active', view === 'stats');
+    
+    // 區塊顯示切換
+    document.getElementById('view-details').style.display = view === 'details' ? 'block' : 'none';
+    document.getElementById('view-stats').style.display = view === 'stats' ? 'block' : 'none';
+    
+    renderCurrentView();
+}
+
+function renderCurrentView() {
+    // 根據當前模式決定呼叫哪個渲染函式
+    if (currentView === 'details') {
+        renderDetailsTable();
+    } else {
+        renderStatsTable();
+    }
+}
+
+// [替代原本的 renderTable]
+function renderDetailsTable() {
+    const filteredData = getFilteredTransactions(); 
+    
+    // 計算本月統計 (顯示在上方卡片)
+    let inc = 0, exp = 0;
+    filteredData.forEach(tx => {
+        if (tx.amount >= 0) inc += tx.amount; else exp += tx.amount;
+    });
+    
+    document.getElementById('total-income').innerText = `$${inc.toLocaleString()}`;
+    document.getElementById('total-expense').innerText = `$${exp.toLocaleString()}`;
+
+    const tbody = document.querySelector('#txTable tbody');
+    const noDataMsg = document.getElementById('noDataMsg');
+    
+    if (filteredData.length === 0) {
+        tbody.innerHTML = '';
+        noDataMsg.style.display = 'block';
+        return;
+    }
+    
+    noDataMsg.style.display = 'none';
+    tbody.innerHTML = filteredData.map(tx => {
+        const amountClass = tx.amount >= 0 ? 'amount-pos' : 'amount-neg';
+        const displayAmount = (tx.amount >= 0 ? '+' : '') + tx.amount.toLocaleString();
+        const txStr = encodeURIComponent(JSON.stringify(tx));
+
+        return `
+            <tr>
+                <td>
+                    <div style="font-weight:500;">${tx.trans_date}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">${tx.trans_time}</div>
+                </td>
+                <td><b>${tx.summary}</b></td>
+                <td class="${amountClass}">${displayAmount}</td>
+                <td class="ref-text">${tx.ref_no || '-'}</td>
+                <td>
+                    <div class="action-buttons">
+                        <button class="btn-icon edit" onclick="openEditModal('${txStr}')" title="編輯">✎</button>
+                        <button class="btn-icon delete" onclick="deleteTx(${tx.transaction_id})" title="刪除">🗑️</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// --- 3. 統計模式邏輯 ---
+
+function renderStatsTable() {
+    const filteredData = getFilteredTransactions();
+    
+    // 分組加總邏輯
+    const incomeMap = {};
+    const expenseMap = {};
+    let inc = 0, exp = 0; // 用於上方卡片更新
+    
+    filteredData.forEach(tx => {
+        // 嚴格比對 (去空白)
+        const name = tx.summary.trim(); 
+        const amt = tx.amount;
+        
+        if (amt >= 0) {
+            inc += amt;
+            if (!incomeMap[name]) incomeMap[name] = { count: 0, total: 0 };
+            incomeMap[name].count++;
+            incomeMap[name].total += amt;
+        } else {
+            exp += amt;
+            if (!expenseMap[name]) expenseMap[name] = { count: 0, total: 0 };
+            expenseMap[name].count++;
+            expenseMap[name].total += amt; 
+        }
+    });
+
+    // 更新上方卡片 (統計模式下也要更新數字)
+    document.getElementById('total-income').innerText = `$${inc.toLocaleString()}`;
+    document.getElementById('total-expense').innerText = `$${exp.toLocaleString()}`;
+    
+    // 轉換為陣列並排序
+    const incomeList = Object.entries(incomeMap)
+        .map(([name, stat]) => ({ name, ...stat }))
+        .sort((a, b) => b.total - a.total); 
+        
+    const expenseList = Object.entries(expenseMap)
+        .map(([name, stat]) => ({ name, ...stat }))
+        .sort((a, b) => a.total - b.total); // 負值越小代表支出越多
+    
+    // 渲染 HTML
+    const renderRows = (list, isExpense) => {
+        if (list.length === 0) return `<tr><td colspan="3" style="text-align:center;color:#999;padding:15px;">無資料</td></tr>`;
+        
+        return list.map(item => `
+            <tr>
+                <td style="font-weight:bold;">${item.name}</td>
+                <td style="color:#666;">${item.count} 筆</td>
+                <td style="text-align:right; font-family:monospace; font-weight:bold;" class="${isExpense ? 'amount-neg' : 'amount-pos'}">
+                    ${item.total.toLocaleString()}
+                </td>
+            </tr>
+        `).join('');
+    };
+    
+    document.querySelector('#statsTableIncome tbody').innerHTML = renderRows(incomeList, false);
+    document.querySelector('#statsTableExpense tbody').innerHTML = renderRows(expenseList, true);
+}
