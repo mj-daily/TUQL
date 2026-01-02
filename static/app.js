@@ -255,12 +255,8 @@ function renderTable() {
         ? allTransactions.filter(tx => tx.account_id === currentFilterAccountId)
         : allTransactions;
 
-    // 計算本頁面(或本帳戶)的收支統計
-    let inc = 0, exp = 0;
     const tbody = document.querySelector('#txTable tbody');
     tbody.innerHTML = filteredData.map(tx => {
-        if (tx.amount >= 0) inc += tx.amount; else exp += tx.amount;
-        
         // ... (原本的表格渲染邏輯，含按鈕) ...
         const amountClass = tx.amount >= 0 ? 'amount-pos' : 'amount-neg';
         const displayAmount = (tx.amount >= 0 ? '+' : '') + tx.amount.toLocaleString();
@@ -284,10 +280,6 @@ function renderTable() {
             </tr>
         `;
     }).join('');
-
-    // 更新下方統計卡片
-    document.getElementById('total-income').innerText = `$${inc.toLocaleString()}`;
-    document.getElementById('total-expense').innerText = `$${exp.toLocaleString()}`;
 }
 
 async function deleteTx(id) {
@@ -916,15 +908,6 @@ function renderCurrentView() {
 // [替代原本的 renderTable]
 function renderDetailsTable() {
     const filteredData = getFilteredTransactions(); 
-    
-    // 計算本月統計 (顯示在上方卡片)
-    let inc = 0, exp = 0;
-    filteredData.forEach(tx => {
-        if (tx.amount >= 0) inc += tx.amount; else exp += tx.amount;
-    });
-    
-    document.getElementById('total-income').innerText = `$${inc.toLocaleString()}`;
-    document.getElementById('total-expense').innerText = `$${exp.toLocaleString()}`;
 
     const tbody = document.querySelector('#txTable tbody');
     const noDataMsg = document.getElementById('noDataMsg');
@@ -969,7 +952,7 @@ function renderStatsTable() {
     // 分組加總邏輯
     const incomeMap = {};
     const expenseMap = {};
-    let inc = 0, exp = 0; // 用於上方卡片更新
+    let inc = 0, exp = 0; // 用於統計標題顯示
     
     filteredData.forEach(tx => {
         // 嚴格比對 (去空白)
@@ -989,9 +972,10 @@ function renderStatsTable() {
         }
     });
 
-    // 更新上方卡片 (統計模式下也要更新數字)
-    document.getElementById('total-income').innerText = `$${inc.toLocaleString()}`;
-    document.getElementById('total-expense').innerText = `$${exp.toLocaleString()}`;
+    const incomeTotalEl = document.getElementById('stats-income-total');
+    const expenseTotalEl = document.getElementById('stats-expense-total');
+    if (incomeTotalEl) incomeTotalEl.textContent = `總計：$${inc.toLocaleString()}`;
+    if (expenseTotalEl) expenseTotalEl.textContent = `總計：$${exp.toLocaleString()}`;
     
     // 轉換為陣列並排序
     const incomeList = Object.entries(incomeMap)

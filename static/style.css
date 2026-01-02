@@ -395,6 +395,12 @@ input[type="password"], input[type="file"] { width: 100%; box-sizing: border-box
     padding-left: 8px;
     border-left: 4px solid currentColor;
 }
+.stats-total {
+    margin-left: 8px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: currentColor;
+}
 .stats-table {
     width: 100%;
     border-collapse: collapse;

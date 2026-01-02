@@ -22,17 +22,6 @@
         <div id="account-list" class="account-scroll-container">
             </div>
 
-        <div class="stats-grid">
-            <div class="card stat-card">
-                <h3>本月總收入</h3>
-                <div id="total-income" class="stat-value amount-pos">$0</div>
-            </div>
-            <div class="card stat-card">
-                <h3>本月總支出</h3>
-                <div id="total-expense" class="stat-value amount-neg">$0</div>
-            </div>
-        </div>
-
         <div class="card">
             <h3>匯入交易 (PDF 對帳單 或 截圖)</h3>
             <input type="file" id="fileInput" accept=".pdf,image/*" multiple>
@@ -75,7 +64,7 @@
 
             <div id="view-stats" style="display: none;">
                 <div class="stats-section">
-                    <h4 class="amount-pos">💰 收入統計</h4>
+                    <h4 class="amount-pos">💰 收入統計 <span id="stats-income-total" class="stats-total"></span></h4>
                     <table class="stats-table" id="statsTableIncome">
                         <thead><tr><th>摘要項目</th><th>筆數</th><th style="text-align:right">總金額</th></tr></thead>
                         <tbody></tbody>
@@ -83,7 +72,7 @@
                 </div>
                 
                 <div class="stats-section" style="margin-top: 20px;">
-                    <h4 class="amount-neg">💸 支出統計</h4>
+                    <h4 class="amount-neg">💸 支出統計 <span id="stats-expense-total" class="stats-total"></span></h4>
                     <table class="stats-table" id="statsTableExpense">
                         <thead><tr><th>摘要項目</th><th>筆數</th><th style="text-align:right">總金額</th></tr></thead>
                         <tbody></tbody>
@@ -279,6 +268,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=17"></script>
+    <script src="/static/app.js?v=18"></script>
 </body>
 </html>
