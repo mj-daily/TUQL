@@ -70,17 +70,23 @@ async def update_transaction(tx_id: int, payload: dict = Body(...)):
         return {"success": False, "message": str(e)}
 
 @app.post("/api/pdf-preview")
-async def pdf_preview(file: UploadFile = File(...), password: str = Form(...)):
+async def pdf_preview(
+    file: UploadFile = File(...), 
+    password: str = Form(...),
+    bank_code: str = Form(...) # [新增]
+):
     try:
         content = await file.read()
         pdf_stream = io.BytesIO(content)
-        # 呼叫純解析函數
-        acc_num, txs = parser.parse_pdf(pdf_stream, password)
+        
+        # 使用工廠取得解析器
+        parser_instance = parser.get_parser(bank_code)
+        acc_num, txs = parser_instance.parse_pdf(pdf_stream, password)
         
         return {
             "success": True, 
             "data": {
-                "account_number": acc_num, # 可能是 3 碼或 5 碼
+                "account_number": acc_num,
                 "transactions": txs,
                 "count": len(txs)
             }
@@ -124,23 +130,31 @@ async def save_batch(payload: dict = Body(...)):
     return {"success": True, "message": f"成功匯入 {saved_count} 筆 (共 {len(transactions)} 筆)"}
 
 @app.post("/api/ocr-identify")
-async def ocr_identify(files: List[UploadFile] = File(...)):
+async def ocr_identify(
+    files: List[UploadFile] = File(...),
+    bank_code: str = Form(...) # [新增]
+):
     results = []
     errors = []
+    
+    # 取得解析器 (假設批次上傳的都是同一家銀行)
+    parser_instance = parser.get_parser(bank_code)
+    
     for file in files:
         try:
             content = await file.read()
-            data = parser.recognize_screenshot(content)
+            data = parser_instance.recognize_screenshot(content)
             results.append(data)
         except Exception as e:
             errors.append(f"{file.filename}: {str(e)}")
+            
     if not results and errors:
         return {"success": False, "message": "; ".join(errors)}
         
     return {
         "success": True, 
         "data": results,
-        "errors": errors # 回傳部分失敗的訊息供前端參考
+        "errors": errors
     }
 
 @app.post("/api/save-manual")

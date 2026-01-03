@@ -378,9 +378,12 @@ async function submitPdfUpload() {
     btnSubmit.disabled = true;
     btnSubmit.innerText = "⏳ 處理中...";
 
+    const bankCode = document.getElementById('uploadBankSelect').value; // [新增] 取得銀行代碼
+
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
     formData.append('password', pdfPwdInput.value);
+    formData.append('bank_code', bankCode); // [新增] 加入 FormData
     
     pwdModal.style.display = 'none';
     statusMsg.innerText = "正在解析 PDF...";
@@ -496,11 +499,12 @@ async function savePdfBatch() {
 }
 // [修改] handleBatchImageUpload：優化進度提示
 async function handleBatchImageUpload(files) {
+    const bankCode = document.getElementById('uploadBankSelect').value; // [新增] 取得銀行代碼
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) {
         formData.append('files', files[i]);
     }
-    
+    formData.append('bank_code', bankCode); // [新增] 加入銀行代碼到 FormData
     // 即時提示
     UI.showStatus(`⏳ 正在上傳並辨識 ${files.length} 張圖片...`, 'info');
     

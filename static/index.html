@@ -24,6 +24,13 @@
 
         <div class="card">
             <h3>匯入交易 (PDF 對帳單 或 截圖)</h3>
+            <div style="margin-bottom: 15px;">
+                <label style="font-weight: bold; color: var(--text-muted); font-size: 0.9rem;">選擇來源銀行：</label>
+                <select id="uploadBankSelect" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 1rem;">
+                    <option value="700">中華郵政 (700)</option>
+                    <option value="050">台灣企銀 (050)</option>
+                </select>
+            </div>
             <input type="file" id="fileInput" accept=".pdf,image/*" multiple>
             <p id="statusMsg" style="color: blue; margin-top: 10px;"></p>
         </div>
@@ -268,6 +275,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=18"></script>
+    <script src="/static/app.js?v=19"></script>
 </body>
 </html>
