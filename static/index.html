@@ -20,11 +20,13 @@
         <div class="card">
             <h3>匯入交易 (PDF 對帳單 或 截圖)</h3>
             <div style="margin-bottom: 15px;">
-                <label style="font-weight: bold; color: var(--text-muted); font-size: 0.9rem;">選擇來源銀行：</label>
-                <select id="uploadBankSelect" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 1rem;">
-                    <option value="700">中華郵政 (700)</option>
-                    <option value="050">台灣企銀 (050)</option>
-                </select>
+                <!-- <label style="font-weight: bold; color: var(--text-muted); font-size: 0.9rem;">選擇來源銀行：</label> -->
+                <div style="margin-bottom: 15px;">
+                <label style="font-weight: bold; color: var(--text-muted); font-size: 0.9rem;">匯入目標帳戶：</label>
+                    <select id="importAccountSelect" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 1rem; width: 100%;">
+                        <option value="">-- 請先選擇帳戶 --</option>
+                    </select>
+                </div>
             </div>
             <input type="file" id="fileInput" accept=".pdf,image/*" multiple>
             <p id="statusMsg" style="color: blue; margin-top: 10px;"></p>
@@ -100,9 +102,7 @@
             
             <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left;">
                 <label style="font-size: 0.85rem; color: #64748b; font-weight: bold;">匯入目標帳戶</label>
-                <select id="ocrBatchAccount" style="width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #cbd5e1;">
-                    <option value="">-- 請選擇歸戶帳戶 --</option>
-                </select>
+                <div id="ocrTargetAccountDisplay" style="font-weight: bold; font-size: 1.1rem; color: #334155; margin-top: 5px;"></div>
             </div>
 
             <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 10px;">
@@ -243,7 +243,7 @@
     <div id="pdfConfirmModal" class="modal">
         <div class="modal-content" style="max-width: 500px;">
             <h3>📂 確認 PDF 匯入資訊</h3>
-            <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">
+            <!-- <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">
                 請確認歸戶目標，避免資料分散
             </p>
 
@@ -260,6 +260,11 @@
                         <option value="">-- 請選擇 --</option>
                         </select>
                 </div>
+            </div> -->
+
+            <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left;">
+                <label style="font-size: 0.85rem; color: #64748b; font-weight: bold;">匯入目標帳戶</label>
+                <div id="pdfTargetAccountDisplay" style="font-weight: bold; font-size: 1.1rem; color: #334155; margin-top: 5px;"></div>
             </div>
 
             <div style="margin-top: 25px; display: flex; flex-direction: column; gap: 10px;">
@@ -269,6 +274,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=25"></script>
+    <script src="/static/app.js?v=26"></script>
 </body>
 </html>

@@ -220,15 +220,20 @@ async function deleteAccount(id) {
 async function fetchAccounts() {
     const res = await fetch('/api/accounts');
     const accounts = await res.json();
+    // [新增] 更新首頁的「匯入目標帳戶」選單
+    const importSelect = document.getElementById('importAccountSelect');
+    const currentVal = importSelect.value; // 記住目前選擇，避免重整後消失
+    importSelect.innerHTML = '<option value="">-- 請先選擇帳戶 --</option>';
+
     const container = document.getElementById('account-list');
     let netWorth = 0;
     
-    // 1. 先計算總淨值
+    // 1. 計算總淨值
     accounts.forEach(acc => {
         netWorth += acc.balance;
     });
 
-    // 2. 渲染總覽卡片 (將 'ALL' 改為 netWorth，'所有帳戶' 改為 '總資產淨值')
+    // 2. 渲染總覽卡片
     let html = `
         <div class="account-card ${currentFilterAccountId === null ? 'active' : ''}" 
              onclick="filterByAccount(null)" style="background: linear-gradient(135deg, #6366f1, #4338ca);">
@@ -238,8 +243,15 @@ async function fetchAccounts() {
         </div>
     `;
 
-    // 3. 渲染個別帳戶卡片
+    // 3. 渲染個別帳戶並填入匯入選單
     accounts.forEach(acc => {
+        // [新增] 填入匯入選單，並將 bank_code 綁定在 data attribute
+        const option = document.createElement('option');
+        option.value = acc.account_id;
+        option.text = `${acc.account_name} (${acc.account_number}) - ${acc.bank_code}`;
+        option.dataset.bankCode = acc.bank_code; 
+        importSelect.appendChild(option);
+
         let cardClass = acc.bank_code === '' ? 'acc-card-manual' : '';
         if (acc.account_name === 'Manual-Import') cardClass = 'acc-card-manual';
 
@@ -254,6 +266,7 @@ async function fetchAccounts() {
     });
     
     container.innerHTML = html;
+    if (currentVal) importSelect.value = currentVal; // 還原選擇
 }
 
 // 切換帳戶篩選
@@ -534,15 +547,21 @@ fileInput.onchange = async (e) => {
     const files = e.target.files;
     if (files.length === 0) return;
 
-    // 判斷邏輯：如果是 PDF (通常一次傳一個)，走舊流程
-    // 如果是圖片 (可能多張)，走新流程
+    // [新增] 強制檢查是否已選擇帳戶
+    const accountSelect = document.getElementById('importAccountSelect');
+    if (!accountSelect.value) {
+        alert("請先選擇「匯入目標帳戶」，系統將根據該帳戶銀行自動決定解析格式。");
+        fileInput.value = ''; // 清空檔案輸入
+        return;
+    }
+
+    // ... (原本的 PDF 與 Image 判斷邏輯保持不變) ...
     if (files[0].type === "application/pdf") {
-        if (files.length > 1) alert("PDF 請逐一上傳，目前僅支援單檔解析");
+        if (files.length > 1) alert("PDF 請逐一上傳");
         pwdModal.style.display = 'block';
         pdfPwdInput.value = '';
         pdfPwdInput.focus();
     } else if (files[0].type.startsWith("image/")) {
-        // [修改] 改為呼叫批次處理
         await handleBatchImageUpload(files);
     } else {
         alert("不支援的檔案格式");
@@ -562,12 +581,17 @@ async function submitPdfUpload() {
     const password = pdfPwdInput.value;
     if (!password) return alert("請輸入密碼"); // 簡易防呆
 
+    // [修改] 從選擇的帳戶中取得 bank_code
+    const accountSelect = document.getElementById('importAccountSelect');
+    // 防呆：雖然 onchange 擋過了，但以防萬一
+    if (!accountSelect.value) return alert("請選擇匯入帳戶");
+
     isPdfUploading = true;
 
     btnSubmit.disabled = true;
     btnSubmit.innerText = "⏳ 處理中...";
 
-    const bankCode = document.getElementById('uploadBankSelect').value; // [新增] 取得銀行代碼
+    const bankCode = accountSelect.options[accountSelect.selectedIndex].dataset.bankCode;
 
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
@@ -599,6 +623,10 @@ async function submitPdfUpload() {
 }
 
 async function openPdfConfirmModal(data) {
+    // [新增] 顯示選定的帳戶名稱
+    const accountSelect = document.getElementById('importAccountSelect');
+    const accountName = accountSelect.options[accountSelect.selectedIndex].text;
+    document.getElementById('pdfTargetAccountDisplay').innerText = accountName;
     // [修改] 在接收資料時，先遍歷並正規化日期
     pendingPdfTransactions = data.transactions.map(tx => ({
         ...tx,
@@ -648,12 +676,14 @@ function closePdfConfirmModal() {
 }
 
 async function savePdfBatch() {
-    const accountId = document.getElementById('pdfTargetAccount').value;
+    // [修改] 從首頁選單取得 ID
+    const accountId = document.getElementById('importAccountSelect').value;
+    if (!accountId) return alert("錯誤：未選擇帳戶");
     
-    if (!accountId) {
-        alert("請選擇一個匯入目標帳戶！若無帳戶請先至「帳戶管理」新增。");
-        return;
-    }
+    // if (!accountId) {
+    //     alert("請選擇一個匯入目標帳戶！若無帳戶請先至「帳戶管理」新增。");
+    //     return;
+    // }
 
     const btn = document.getElementById('btnPdfSave');
     btn.innerText = "⏳ 匯入中..."; btn.disabled = true;
@@ -688,7 +718,8 @@ async function savePdfBatch() {
 }
 // [修改] handleBatchImageUpload：優化進度提示
 async function handleBatchImageUpload(files) {
-    const bankCode = document.getElementById('uploadBankSelect').value; // [新增] 取得銀行代碼
+    const accountSelect = document.getElementById('importAccountSelect');
+    const bankCode = accountSelect.options[accountSelect.selectedIndex].dataset.bankCode;
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) {
         formData.append('files', files[i]);
@@ -721,55 +752,25 @@ async function handleBatchImageUpload(files) {
     }
     // 注意：這裡不設 autoHide，因為使用者還在操作，直到他關閉視窗或完成
 }
-// [修改] openOcrBatchModal：加入監聽器
+
 async function openOcrBatchModal(items) {
-    const select = document.getElementById('ocrBatchAccount');
-    select.innerHTML = '<option value="">-- 請選擇歸戶帳戶 --</option>';
-    
-    // ... (取得帳戶列表與自動匹配邏輯保持不變) ...
-    const res = await fetch('/api/accounts');
-    const accounts = await res.json();
-    
-    // ... (填入 options) ...
-    let detectedAccNum = items.length > 0 ? items[0].account_number : null;
-    let matchedId = "";
-    accounts.forEach(acc => {
-        const option = document.createElement('option');
-        option.value = acc.account_id;
-        option.text = `${acc.account_name} (${acc.account_number}) - ${acc.bank_code}`;
-        select.appendChild(option);
-        if (detectedAccNum && acc.account_number.endsWith(detectedAccNum)) {
-            matchedId = acc.account_id;
-        }
-    });
-    if (matchedId) select.value = matchedId;
+    // [修改] 顯示選定的帳戶名稱
+    const accountSelect = document.getElementById('importAccountSelect');
+    const accountName = accountSelect.options[accountSelect.selectedIndex].text;
+    document.getElementById('ocrTargetAccountDisplay').innerText = accountName;
 
     // 渲染卡片
     renderBatchCards(items);
-
+    
+    // 預先正規化日期 (若有需要)
     items.forEach(item => {
-        item.date = normalizeDate(item.date); // [新增] 正規化日期
+        item.date = normalizeDate(item.date);
     });
-
-    // 清空並重新渲染 (確保顯示的是西元年)
-    ocrBatchList.innerHTML = '';
-    items.forEach((item, index) => {
-        const card = createOcrCard(item, index);
-        ocrBatchList.appendChild(card);
-    });
-
-    // [新增] 綁定事件：當帳戶改變時，重新檢查重複
-    // 先移除舊的監聽器以免重複綁定
-    const newSelect = select.cloneNode(true);
-    select.parentNode.replaceChild(newSelect, select);
-    newSelect.addEventListener('change', () => checkBatchDuplicates());
+    
+    // 直接執行一次檢查重複 (因為帳戶已確定)
+    checkBatchDuplicates();
 
     ocrBatchModal.style.display = 'block';
-
-    // 如果已經有選中帳戶，直接執行一次檢查
-    if (newSelect.value) {
-        checkBatchDuplicates();
-    }
 }
 
 // [新增] 渲染卡片獨立函數 (方便重繪)
@@ -783,7 +784,8 @@ function renderBatchCards(items) {
 
 // [新增] 檢查重複功能
 async function checkBatchDuplicates() {
-    const accountId = document.getElementById('ocrBatchAccount').value;
+    // [修改] 來源改為首頁選單
+    const accountId = document.getElementById('importAccountSelect').value;
     if (!accountId) return; // 沒選帳戶無法計算 Hash
 
     // 1. 收集目前畫面上的資料
@@ -883,8 +885,9 @@ window.removeOcrCard = function(btn) {
 
 // 確認全部匯入
 async function saveOcrBatch() {
-    const accountId = document.getElementById('ocrBatchAccount').value;
-    if (!accountId) return alert("請選擇匯入目標帳戶！");
+    // [修改] 來源改為首頁選單
+    const accountId = document.getElementById('importAccountSelect').value;
+    if (!accountId) return alert("錯誤：未選擇帳戶");
 
     const cards = document.querySelectorAll('.ocr-card');
     if (cards.length === 0) return alert("沒有可匯入的交易資料");
