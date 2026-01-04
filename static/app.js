@@ -182,17 +182,23 @@ async function fetchAccounts() {
     const container = document.getElementById('account-list');
     let netWorth = 0;
     
+    // 1. 先計算總淨值
+    accounts.forEach(acc => {
+        netWorth += acc.balance;
+    });
+
+    // 2. 渲染總覽卡片 (將 'ALL' 改為 netWorth，'所有帳戶' 改為 '總資產淨值')
     let html = `
         <div class="account-card ${currentFilterAccountId === null ? 'active' : ''}" 
              onclick="filterByAccount(null)" style="background: linear-gradient(135deg, #6366f1, #4338ca);">
             <div class="acc-name">總覽</div>
-            <div class="acc-balance">ALL</div>
-            <div class="acc-number">所有帳戶</div>
+            <div class="acc-balance">$${netWorth.toLocaleString()}</div>
+            <div class="acc-number">總資產淨值</div>
         </div>
     `;
 
+    // 3. 渲染個別帳戶卡片
     accounts.forEach(acc => {
-        netWorth += acc.balance;
         let cardClass = acc.bank_code === '' ? 'acc-card-manual' : '';
         if (acc.account_name === 'Manual-Import') cardClass = 'acc-card-manual';
 
@@ -205,11 +211,8 @@ async function fetchAccounts() {
             </div>
         `;
     });
+    
     container.innerHTML = html;
-    // 更新總資產
-    const nw = document.getElementById('net-worth');
-    nw.innerText = `$${netWorth.toLocaleString()}`;
-    nw.style.color = netWorth >= 0 ? 'var(--text-main)' : 'var(--danger-color)';
 }
 
 // 切換帳戶篩選
@@ -288,7 +291,8 @@ async function deleteTx(id) {
         const res = await fetch(`/api/transaction/${id}`, { method: 'DELETE' });
         const result = await res.json();
         if (result.success) {
-            fetchTransactions(); // 重新整理列表
+            fetchTransactions(); // 更新列表
+            fetchAccounts(); // 更新餘額
         } else {
             alert("刪除失敗: " + result.message);
         }
@@ -331,7 +335,8 @@ async function submitEdit() {
         const result = await res.json();
         if (result.success) {
             closeEditModal();
-            fetchTransactions(); // 刷新列表
+            fetchTransactions(); // 更新列表
+            fetchAccounts(); // 更新餘額
         } else {
             alert("更新失敗: " + result.message);
         }
@@ -798,7 +803,8 @@ async function saveOcrResult() {
             ocrModal.style.display = 'none';
             fileInput.value = ''; 
             statusMsg.innerText = "✅ 單筆交易存入成功！";
-            fetchTransactions();
+            fetchTransactions(); // 更新列表
+            fetchAccounts(); // 更新餘額
         } else {
             // 失敗：顯示錯誤在 Modal 內，不關閉視窗
             // 這樣使用者可以看到 "重複匯入" 的訊息，決定要取消還是改序號
