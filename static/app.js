@@ -23,7 +23,7 @@ const accModal = document.getElementById('accModal');
 // PDF 確認匯入彈窗元素
 const pdfConfirmModal = document.getElementById('pdfConfirmModal');
 
-// [新增] 狀態訊息管理工具
+// 狀態訊息管理工具
 const UI = {
     timer: null,
     showStatus: (msg, type = 'info', autoHide = false) => {
@@ -44,6 +44,11 @@ const UI = {
     }
 };
 
+// [新增] 建立一個經過防抖處理的檢查函式 設定延遲 500ms (使用者停止打字 0.5 秒後才發送 API)
+const debouncedCheckDuplicates = debounce(() => {
+    checkBatchDuplicates();
+}, 500);
+
 // 全域變數，存儲所有交易資料 (方便前端篩選，不用一直 call API)
 let allTransactions = [];
 let currentFilterAccountId = null; // null 代表顯示全部
@@ -56,7 +61,24 @@ let currentView = "details"; // "details" or "stats"
 document.addEventListener('DOMContentLoaded', async () => {
     await fetchAccounts();     // 先載入帳戶
     await fetchTransactions(); // 再載入交易
+    // 當使用者在卡片輸入框打字時，會觸發此事件
+    ocrBatchList.addEventListener('input', (e) => {
+        // 確保觸發的是 INPUT 元素
+        if (e.target.tagName === 'INPUT') {
+            // 呼叫防抖後的函式，避免每打一個字就 call 一次 API
+            debouncedCheckDuplicates();
+        }
+    });
 });
+
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+}
 
 // [新增] 日期正規化工具：自動將民國年 (3碼) 轉為西元年 (4碼)
 function normalizeDate(dateStr) {
