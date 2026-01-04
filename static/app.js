@@ -18,6 +18,11 @@ const ocrBatchList = document.getElementById('ocrBatchList');
 
 // 編輯交易彈窗元素
 const editModal = document.getElementById('editModal');
+const editDuplicateAlert = document.getElementById('editDuplicateAlert');
+const btnSaveEdit = document.getElementById('btnSaveEdit');
+const editInputs = document.querySelectorAll('#editModal input:not([type="hidden"])');
+let editOriginal = null; // 保存開啟時的原始值用於判斷是否修改
+let editDuplicateFlag = false; // 當前是否重複
 const accModal = document.getElementById('accModal');
 
 // PDF 確認匯入彈窗元素
@@ -48,6 +53,10 @@ const UI = {
 const debouncedCheckDuplicates = debounce(() => {
     checkBatchDuplicates();
 }, 500);
+// [新增] 編輯視窗的防抖檢查
+const debouncedCheckEdit = debounce(() => {
+    checkEditDuplicate();
+}, 500);
 
 // 全域變數，存儲所有交易資料 (方便前端篩選，不用一直 call API)
 let allTransactions = [];
@@ -69,6 +78,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             debouncedCheckDuplicates();
         }
     });
+        editInputs.forEach(input => {
+            input.addEventListener('input', () => {
+                markEditDirty();
+                debouncedCheckEdit();
+            });
+        });
+    editInputs.forEach(input => {
+        input.addEventListener('input', debouncedCheckEdit);
+    });
+
 });
 
 function debounce(func, delay) {
@@ -326,28 +345,80 @@ async function deleteTx(id) {
 // --- 編輯交易 ---
 function openEditModal(txStr) {
     const tx = JSON.parse(decodeURIComponent(txStr));
-    document.getElementById('editTxId').value = tx.transaction_id;
-    document.getElementById('editDate').value = tx.trans_date;
-    document.getElementById('editTime').value = tx.trans_time;
+    document.getElementById('editId').value = tx.transaction_id;
+    document.getElementById('editAccountId').value = tx.account_id; // [關鍵]
+    document.getElementById('editDate').value = tx.trans_date.replace(/\//g, '-');
+    // [修復] time input 只支援 HH:MM 格式，需要提取前 5 個字符
+    const timeDisplay = (tx.trans_time || '00:00:00').substring(0, 5);
+    document.getElementById('editTime').value = timeDisplay;
+    // [新增] 保存原始完整時間用於 Hash 計算
+    document.getElementById('editTime').dataset.originalTime = tx.trans_time || '00:00:00';
     document.getElementById('editSummary').value = tx.summary;
     document.getElementById('editAmount').value = tx.amount;
-    document.getElementById('editRef').value = tx.ref_no;
+    document.getElementById('editRef').value = tx.ref_no || '';
+    // 保存原始值
+    editOriginal = {
+        date: document.getElementById('editDate').value,
+        time: document.getElementById('editTime').value,
+        amount: document.getElementById('editAmount').value,
+        ref: document.getElementById('editRef').value,
+        summary: document.getElementById('editSummary').value
+    };
+    // 重置警示狀態
+    resetEditStatus();
     editModal.style.display = 'block';
+    // 打開 Modal 後立即執行一次重複檢查
+    setTimeout(() => {
+        checkEditDuplicate();
+        updateEditSaveButton();
+    }, 100);
 }
 
 function closeEditModal() {
     editModal.style.display = 'none';
+    resetEditStatus();
+}
+
+function resetEditStatus() {
+    editDuplicateAlert.style.display = 'none';
+    btnSaveEdit.disabled = true; // 初始鎖定直到有變更
+    btnSaveEdit.innerText = "儲存";
+    btnSaveEdit.classList.add('btn-disabled');
+    editInputs.forEach(inp => inp.style.borderColor = '#e2e8f0'); // 還原邊框顏色
+    editDuplicateFlag = false;
 }
 
 async function submitEdit() {
-    const id = document.getElementById('editTxId').value;
+    const id = document.getElementById('editId').value;
+    const accountId = document.getElementById('editAccountId').value; // [新增]
+    const dateInput = document.getElementById('editDate').value; // YYYY-MM-DD
+    const timeInput = document.getElementById('editTime').value; // HH:MM
+    
+    // [修復] 將日期格式轉換為資料庫格式 (YYYY/MM/DD)
+    const date = dateInput.replace(/-/g, '/');
+    // [修復] 如果時間被修改過，使用修改後的時間；否則保留原始完整時間
+    let time = document.getElementById('editTime').dataset.originalTime || '00:00:00';
+    if (timeInput !== time.substring(0, 5)) {
+        // 使用者修改了時間，補充秒數
+        time = timeInput ? timeInput + ':00' : '00:00:00';
+    }
+    
     const payload = {
-        date: document.getElementById('editDate').value,
-        time: document.getElementById('editTime').value,
+        date: date,
+        time: time,
         summary: document.getElementById('editSummary').value,
         amount: parseFloat(document.getElementById('editAmount').value),
-        ref_no: document.getElementById('editRef').value
+        ref_no: document.getElementById('editRef').value,
+        account_id: parseInt(accountId) // [新增] 後端 Hash 需要
     };
+    
+    if (!payload.date || isNaN(payload.amount)) return alert("請輸入完整資料");
+
+    // 防呆：未修改或重複時不送出
+    if (!isEditModified()) {
+        return;
+    }
+
     try {
         const res = await fetch(`/api/transaction/${id}`, {
             method: 'PUT',
@@ -355,16 +426,107 @@ async function submitEdit() {
             body: JSON.stringify(payload)
         });
         const result = await res.json();
+        
         if (result.success) {
             closeEditModal();
-            fetchTransactions(); // 更新列表
-            fetchAccounts(); // 更新餘額
+            fetchTransactions(); 
+            fetchAccounts();
         } else {
             alert("更新失敗: " + result.message);
         }
     } catch (e) {
         alert("連線錯誤");
     }
+}
+
+// [新增] 檢查單筆編輯是否重複
+async function checkEditDuplicate() {
+    const txId = document.getElementById('editId').value;
+    const accountId = document.getElementById('editAccountId').value;
+    const dateInput = document.getElementById('editDate').value; // YYYY-MM-DD 格式
+    const timeInput = document.getElementById('editTime').value; // HH:MM 格式
+    // const summary = document.getElementById('editSummary').value; // Hash 不包含 summary
+    const amount = parseFloat(document.getElementById('editAmount').value);
+    const ref_no = document.getElementById('editRef').value;
+
+    if (!accountId || !dateInput || isNaN(amount)) return;
+
+    // [修復] 將日期格式轉換為資料庫格式 (YYYY/MM/DD)
+    const date = dateInput.replace(/-/g, '/');
+    // [修復] 如果時間被修改過，使用修改後的時間；否則使用原始完整時間
+    let time = document.getElementById('editTime').dataset.originalTime || '00:00:00';
+    if (timeInput !== time.substring(0, 5)) {
+        // 使用者修改了時間，補充秒數
+        time = timeInput ? timeInput + ':00' : '00:00:00';
+    }
+
+    try {
+        const res = await fetch('/api/check-duplicates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                account_id: parseInt(accountId),
+                transactions: [{
+                    date: date,
+                    time: time,
+                    amount: amount,
+                    ref_no: ref_no
+                }],
+                exclude_transaction_id: parseInt(txId) // [關鍵] 告訴後端排除自己
+            })
+        });
+        
+        const result = await res.json();
+        if (result.success && result.duplicates[0] === true) {
+            // 發現重複
+            showEditDuplicateError(true);
+        } else {
+            // 沒有重複
+            showEditDuplicateError(false);
+        }
+    } catch (e) {
+        console.error("Check duplicate failed", e);
+    }
+}
+
+function showEditDuplicateError(isDuplicate) {
+    editDuplicateFlag = isDuplicate;
+    if (isDuplicate) {
+        editDuplicateAlert.style.display = 'block';
+        btnSaveEdit.innerText = "重複資料";
+        // 將關鍵欄位標紅
+        document.getElementById('editDate').style.borderColor = 'var(--danger-color)';
+        document.getElementById('editTime').style.borderColor = 'var(--danger-color)';
+        document.getElementById('editAmount').style.borderColor = 'var(--danger-color)';
+        document.getElementById('editRef').style.borderColor = 'var(--danger-color)';
+    } else {
+        editDuplicateAlert.style.display = 'none';
+        btnSaveEdit.innerText = "儲存";
+        editInputs.forEach(inp => inp.style.borderColor = '#e2e8f0');
+    }
+    updateEditSaveButton();
+}
+
+// 判斷是否已修改
+function isEditModified() {
+    if (!editOriginal) return false;
+    return (
+        editOriginal.date !== document.getElementById('editDate').value ||
+        editOriginal.time !== document.getElementById('editTime').value ||
+        editOriginal.amount !== document.getElementById('editAmount').value ||
+        editOriginal.ref !== document.getElementById('editRef').value ||
+        editOriginal.summary !== document.getElementById('editSummary').value
+    );
+}
+
+function markEditDirty() {
+    updateEditSaveButton();
+}
+
+function updateEditSaveButton() {
+    const shouldEnable = !editDuplicateFlag && isEditModified();
+    btnSaveEdit.disabled = !shouldEnable;
+    btnSaveEdit.classList.toggle('btn-disabled', !shouldEnable);
 }
 
 // --- PDF & OCR 上傳 ---

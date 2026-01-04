@@ -52,22 +52,66 @@ async def delete_transaction(tx_id: int):
     except Exception as e:
         return {"success": False, "message": str(e)}
 
+# @app.put("/api/transaction/{tx_id}")
+# async def update_transaction(tx_id: int, payload: dict = Body(...)):
+#     try:
+#         with sqlite3.connect("finance.db") as conn:
+#             cursor = conn.cursor()
+#             # 這裡我們允許修改日期、時間、摘要、金額、序號
+#             # 注意：這裡不重新計算 hash，因為這只是修正資料
+#             cursor.execute("""
+#                 UPDATE transactions 
+#                 SET trans_date = ?, trans_time = ?, summary = ?, amount = ?, ref_no = ?
+#                 WHERE transaction_id = ?
+#             """, (payload['date'], payload['time'], payload['summary'], payload['amount'], payload['ref_no'], tx_id))
+#             conn.commit()
+#         return {"success": True}
+#     except Exception as e:
+#         return {"success": False, "message": str(e)}
+
+# [修改] 編輯交易 API：更新資料並重新計算 Hash
 @app.put("/api/transaction/{tx_id}")
-async def update_transaction(tx_id: int, payload: dict = Body(...)):
+async def edit_transaction(tx_id: int, item: dict = Body(...)):
+    date = item.get("date")
+    time = item.get("time", "00:00:00")
+    summary = item.get("summary")
+    amount = item.get("amount")
+    ref_no = item.get("ref_no", "")
+    account_id = item.get("account_id") # 前端需傳入 account_id 以計算 Hash
+
+    # 1. 計算新的 Hash (編輯視同手動修改，使用 MANUAL 前綴)
+    # 格式必須與 save_manual 一致：MANUAL|account_id|date|time|amount|ref_no
+    raw_id = f"MANUAL|{account_id}|{date}|{time}|{amount}|{ref_no}"
+    new_hash = hashlib.sha256(raw_id.encode()).hexdigest()
+
     try:
         with sqlite3.connect("finance.db") as conn:
             cursor = conn.cursor()
-            # 這裡我們允許修改日期、時間、摘要、金額、序號
-            # 注意：這裡不重新計算 hash，因為這只是修正資料
+            
+            # 檢查新 Hash 是否跟「別人」衝突 (避免 Unique Constraint Error)
+            cursor.execute("""
+                SELECT transaction_id FROM transactions 
+                WHERE trace_hash = ? AND transaction_id != ?
+            """, (new_hash, tx_id))
+            collision = cursor.fetchone()
+            
+            if collision:
+                return {"success": False, "message": "修改後的資料與現有交易重複，無法儲存。"}
+
+            # 更新資料
             cursor.execute("""
                 UPDATE transactions 
-                SET trans_date = ?, trans_time = ?, summary = ?, amount = ?, ref_no = ?
-                WHERE transaction_id = ?
-            """, (payload['date'], payload['time'], payload['summary'], payload['amount'], payload['ref_no'], tx_id))
+                SET trans_date=?, trans_time=?, summary=?, amount=?, ref_no=?, trace_hash=?
+                WHERE transaction_id=?
+            """, (date, time, summary, amount, ref_no, new_hash, tx_id))
+            
+            if cursor.rowcount == 0:
+                return {"success": False, "message": "找不到該筆交易"}
+                
             conn.commit()
-        return {"success": True}
+            return {"success": True, "message": "更新成功"}
     except Exception as e:
-        return {"success": False, "message": str(e)}
+        return {"success": False, "message": f"資料庫錯誤: {str(e)}"}
 
 @app.post("/api/pdf-preview")
 async def pdf_preview(
@@ -277,11 +321,15 @@ async def delete_account(acc_id: int):
 @app.post("/api/check-duplicates")
 async def check_duplicates(payload: dict = Body(...)):
     """
-    Payload: { "account_id": 1, "transactions": [ ... ] }
-    回傳: [true, false, true...] (對應每一筆是否重複)
+    Payload: { 
+        "account_id": 1, 
+        "transactions": [ ... ],
+        "exclude_transaction_id": 123  (選填，用於編輯模式排除自己)
+    }
     """
     account_id = payload.get("account_id")
     transactions = payload.get("transactions", [])
+    exclude_id = payload.get("exclude_transaction_id") # [新增]
     
     if not account_id:
         return {"success": False, "message": "未指定帳戶"}
@@ -292,18 +340,31 @@ async def check_duplicates(payload: dict = Body(...)):
         cursor = conn.cursor()
         
         for tx in transactions:
-            # 使用與 save-batch 完全相同的 Hash 邏輯
-            # 注意：必須確保欄位都存在，若無則給空字串
             date = tx.get('date', '')
             time = tx.get('time', '')
             ref_no = tx.get('ref_no', '')
             amount = tx.get('amount', 0)
             
-            raw_id = f"BATCH|{account_id}|{date}|{time}|{ref_no}|{amount}"
-            t_hash = hashlib.sha256(raw_id.encode()).hexdigest()
+            # 1. 計算 BATCH 格式雜湊
+            raw_id_batch = f"BATCH|{account_id}|{date}|{time}|{ref_no}|{amount}"
+            hash_batch = hashlib.sha256(raw_id_batch.encode()).hexdigest()
+
+            # 2. 計算 MANUAL 格式雜湊
+            raw_id_manual = f"MANUAL|{account_id}|{date}|{time}|{amount}|{ref_no}"
+            hash_manual = hashlib.sha256(raw_id_manual.encode()).hexdigest()
             
-            # 查詢雜湊是否存在
-            cursor.execute("SELECT 1 FROM transactions WHERE trace_hash = ?", (t_hash,))
+            # 3. 檢查資料庫 (排除正在編輯的那筆 ID)
+            query = """
+                SELECT 1 FROM transactions 
+                WHERE (trace_hash = ? OR trace_hash = ?)
+            """
+            params = [hash_batch, hash_manual]
+            
+            if exclude_id:
+                query += " AND transaction_id != ?"
+                params.append(exclude_id)
+            
+            cursor.execute(query, tuple(params))
             exists = cursor.fetchone() is not None
             results.append(exists)
 

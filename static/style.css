@@ -184,6 +184,31 @@ h1 { font-weight: 700; color: var(--text-main); margin-bottom: 30px; display: fl
     position: relative;
     overflow: hidden; /* 防止外層出現捲軸 */
 }
+#editModal .modal-content {
+    max-width: 540px;
+    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 60%);
+    border: 1px solid var(--border-color);
+    text-align: left;
+    gap: 6px;
+}
+#editModal .modal-content h3 {
+    margin-top: 0;
+    text-align: left;
+}
+#editModal .modal-content label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 700;
+}
+#editModal .modal-content input[type="date"],
+#editModal .modal-content input[type="time"],
+#editModal .modal-content input[type="text"],
+#editModal .modal-content input[type="number"] {
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px;
+}
 /* 針對捲軸的美化 (Chrome/Safari/Edge) - 選用 */
 .modal-content::-webkit-scrollbar {
     width: 8px;
@@ -311,6 +336,13 @@ h1 { font-weight: 700; color: var(--text-main); margin-bottom: 30px; display: fl
     font-weight: 600;
     cursor: pointer;
     width: 100%; /* 按鈕在 Modal 內滿寬 */
+}
+.btn:disabled,
+.btn.btn-disabled {
+    background: #cbd5e1;
+    color: #94a3b8;
+    cursor: not-allowed;
+    box-shadow: none;
 }
 .btn-cancel {
     background: transparent;

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>My Finance Dash</title>
-    <link rel="stylesheet" href="/static/style.css?v=12">
+    <link rel="stylesheet" href="/static/style.css?v=13">
 </head>
 <body>
     <div class="container">
@@ -164,32 +164,31 @@
     <div id="editModal" class="modal">
         <div class="modal-content">
             <h3>✏️ 編輯交易</h3>
+
+            <div id="editDuplicateAlert" style="display: none; background: #fef2f2; border: 1px solid var(--danger-color); color: var(--danger-color); padding: 10px; border-radius: 6px; margin-bottom: 15px; font-weight: bold; font-size: 0.9rem;">
+                ⚠️ 此交易資料已存在於資料庫中，請檢查。
+            </div>
+
             <input type="hidden" id="editTxId">
             
-            <div class="ocr-form">
-                <div class="form-item">
-                    <label>日期</label>
-                    <input type="text" id="editDate">
-                </div>
-                <div class="form-item">
-                    <label>時間</label>
-                    <input type="text" id="editTime">
-                </div>
-                <div class="form-item">
-                    <label>摘要</label>
-                    <input type="text" id="editSummary">
-                </div>
-                <div class="form-item">
-                    <label>金額</label>
-                    <input type="number" id="editAmount" step="1">
-                </div>
-                <div class="form-item">
-                    <label>序號</label>
-                    <input type="text" id="editRef">
-                </div>
-            </div>
-            <div style="margin-top: 20px; display: flex; gap: 10px;">
-                <button class="btn" onclick="submitEdit()">儲存修改</button>
+            <input type="hidden" id="editId">
+            <input type="hidden" id="editAccountId"> <label>日期</label>
+            <input type="date" id="editDate" class="inp-block">
+            
+            <label>時間</label>
+            <input type="time" id="editTime" step="1" class="inp-block">
+            
+            <label>摘要</label>
+            <input type="text" id="editSummary" class="inp-block">
+            
+            <label>金額</label>
+            <input type="number" id="editAmount" class="inp-block">
+            
+            <label>序號/備註</label>
+            <input type="text" id="editRef" class="inp-block">
+            
+            <div class="modal-actions">
+                <button class="btn" onclick="submitEdit()" id="btnSaveEdit">儲存</button>
                 <button class="btn btn-cancel" onclick="closeEditModal()">取消</button>
             </div>
         </div>
@@ -270,6 +269,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=22"></script>
+    <script src="/static/app.js?v=25"></script>
 </body>
 </html>
