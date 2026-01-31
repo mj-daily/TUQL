@@ -320,7 +320,15 @@ document.getElementById('btnSubmit').onclick = async () => {
     if (!pwd) return alert("請輸入密碼");
     
     const accountSelect = els.importAccountSelect;
-    const bankCode = accountSelect.options[accountSelect.selectedIndex].dataset.bankCode;
+    const selectedOption = accountSelect.options[accountSelect.selectedIndex];
+    
+    // Debug Log
+    console.log("Selected Option:", selectedOption);
+    console.log("Bank Code:", selectedOption.dataset.bankCode);
+    console.log("Acc Num:", selectedOption.dataset.accountNumber);
+
+    const bankCode = selectedOption.dataset.bankCode;
+    const targetAccount = selectedOption.dataset.accountNumber;
 
     state.isPdfUploading = true;
     const btn = document.getElementById('btnSubmit');
@@ -333,6 +341,12 @@ document.getElementById('btnSubmit').onclick = async () => {
         formData.append('file', els.fileInput.files[0]);
         formData.append('password', pwd);
         formData.append('bank_code', bankCode);
+        if (targetAccount) {
+            formData.append('target_account', targetAccount);
+            console.log("Appending target_account:", targetAccount);
+        } else {
+            console.warn("No target_account found in dataset");
+        }
 
         const res = await API.previewPdf(formData);
         if (res.success) {

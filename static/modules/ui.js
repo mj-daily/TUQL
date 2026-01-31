@@ -97,6 +97,7 @@ export const UI = {
             option.value = acc.account_id;
             option.text = `${acc.account_name} (${acc.account_number}) - ${acc.bank_code}`;
             option.dataset.bankCode = acc.bank_code;
+            option.dataset.accountNumber = acc.account_number;
             els.importAccountSelect.appendChild(option);
         });
         if (currentVal) els.importAccountSelect.value = currentVal;

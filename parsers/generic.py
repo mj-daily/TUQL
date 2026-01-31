@@ -6,7 +6,7 @@ class GenericParser(BankParser):
     def __init__(self, config):
         self.config = config
         
-    def parse_pdf(self, pdf_stream, password):
+    def parse_pdf(self, pdf_stream, password, **kwargs):
         try:
             with pdfplumber.open(pdf_stream, password=password) as pdf:
                 full_text = "\n".join([page.extract_text() or "" for page in pdf.pages])

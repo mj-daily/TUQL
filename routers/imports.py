@@ -11,14 +11,19 @@ router = APIRouter()
 async def pdf_preview(
     file: UploadFile = File(...), 
     password: str = Form(...),
-    bank_code: str = Form(...) 
+    bank_code: str = Form(...),
+    target_account: str = Form(None) 
 ):
     try:
         content = await file.read()
         pdf_stream = io.BytesIO(content)
         
         parser_instance = parser.get_parser(bank_code)
-        acc_num, txs = parser_instance.parse_pdf(pdf_stream, password)
+        acc_num, txs = parser_instance.parse_pdf(
+            pdf_stream, 
+            password, 
+            target_account=target_account
+        )
         
         return {
             "success": True, 

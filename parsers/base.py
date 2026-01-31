@@ -5,10 +5,11 @@ class BankParser(ABC):
     """銀行解析器基礎介面"""
     
     @abstractmethod
-    def parse_pdf(self, pdf_stream, password):
+    def parse_pdf(self, pdf_stream, password, **kwargs):
         """
         解析 PDF
         回傳: (account_number, transactions)
+        kwargs 可能包含 'target_account' (str) 用於特定帳號過濾
         """
         pass
 
