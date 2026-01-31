@@ -1,1203 +1,482 @@
-// 頁面元素選取
-const fileInput = document.getElementById('fileInput'); // 注意這裡 ID 改為通用名稱
-const statusMsg = document.getElementById('statusMsg');
+import { API } from './modules/api.js';
+import { UI, els } from './modules/ui.js';
+import { state, getFilteredTransactions } from './modules/state.js';
+import * as Utils from './modules/utils.js';
 
-// PDF 相關元素
-const pwdModal = document.getElementById('pwdModal');
-const pdfPwdInput = document.getElementById('pdfPwd');
-const btnSubmit = document.getElementById('btnSubmit');
-const btnCancel = document.getElementById('btnCancel');
+// --- Initialization ---
 
-// OCR 相關元素
-const ocrModal = document.getElementById('ocrModal');
-const btnOcrSave = document.getElementById('btnOcrSave');
-const btnOcrCancel = document.getElementById('btnOcrCancel');
-const ocrErrorMsg = document.getElementById('ocrErrorMsg');
-const ocrBatchModal = document.getElementById('ocrBatchModal');
-const ocrBatchList = document.getElementById('ocrBatchList');
-
-// 編輯交易彈窗元素
-const editModal = document.getElementById('editModal');
-const editDuplicateAlert = document.getElementById('editDuplicateAlert');
-const btnSaveEdit = document.getElementById('btnSaveEdit');
-const editInputs = document.querySelectorAll('#editModal input:not([type="hidden"])');
-let editOriginal = null; // 保存開啟時的原始值用於判斷是否修改
-let editDuplicateFlag = false; // 當前是否重複
-const accModal = document.getElementById('accModal');
-
-// PDF 確認匯入彈窗元素
-const pdfConfirmModal = document.getElementById('pdfConfirmModal');
-
-// 狀態訊息管理工具
-const UI = {
-    timer: null,
-    showStatus: (msg, type = 'info', autoHide = false) => {
-        if (UI.timer) clearTimeout(UI.timer);
-        statusMsg.innerText = msg;
-        statusMsg.style.color = type === 'error' ? 'var(--danger-color)' : 
-                                type === 'success' ? 'var(--success-color)' : 'blue';
-        
-        if (autoHide) {
-            UI.timer = setTimeout(() => {
-                statusMsg.innerText = '';
-            }, 5000); // 5秒後自動消失
-        }
-    },
-    clearStatus: () => {
-        if (UI.timer) clearTimeout(UI.timer);
-        statusMsg.innerText = '';
-    }
-};
-
-// [新增] 建立一個經過防抖處理的檢查函式 設定延遲 500ms (使用者停止打字 0.5 秒後才發送 API)
-const debouncedCheckDuplicates = debounce(() => {
-    checkBatchDuplicates();
-}, 500);
-// [新增] 編輯視窗的防抖檢查
-const debouncedCheckEdit = debounce(() => {
-    checkEditDuplicate();
-}, 500);
-
-// 全域變數，存儲所有交易資料 (方便前端篩選，不用一直 call API)
-let allTransactions = [];
-let currentFilterAccountId = null; // null 代表顯示全部
-let pendingPdfTransactions = []; // 暫存 PDF 解析出來的交易資料
-let isPdfUploading = false; // 防止重複上傳
-let currentYearMonth = ""; // 格式 "YYYY-MM"
-let currentView = "details"; // "details" or "stats"
-
-// 初始化
 document.addEventListener('DOMContentLoaded', async () => {
-    await fetchAccounts();     // 先載入帳戶
-    await fetchTransactions(); // 再載入交易
-    // 當使用者在卡片輸入框打字時，會觸發此事件
-    ocrBatchList.addEventListener('input', (e) => {
-        // 確保觸發的是 INPUT 元素
-        if (e.target.tagName === 'INPUT') {
-            // 呼叫防抖後的函式，避免每打一個字就 call 一次 API
-            debouncedCheckDuplicates();
-        }
-    });
-        editInputs.forEach(input => {
-            input.addEventListener('input', () => {
-                markEditDirty();
-                debouncedCheckEdit();
-            });
-        });
-    editInputs.forEach(input => {
-        input.addEventListener('input', debouncedCheckEdit);
+    await loadAccounts();
+    await loadTransactions();
+    
+    // Global Event Listeners
+    els.ocrBatchList.addEventListener('input', (e) => {
+        if (e.target.tagName === 'INPUT') debouncedCheckBatchDuplicates();
     });
 
+    els.editInputs.forEach(input => {
+        input.addEventListener('input', () => {
+            updateEditSaveState();
+            debouncedCheckEdit();
+        });
+    });
 });
 
-function debounce(func, delay) {
-    let timeout;
-    return function(...args) {
-        const context = this;
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(context, args), delay);
-    };
-}
+// --- Debouncers ---
 
-// [新增] 日期正規化工具：自動將民國年 (3碼) 轉為西元年 (4碼)
-function normalizeDate(dateStr) {
-    if (!dateStr) return "";
-    
-    // 移除空白並以非數字字元分割 (支援 112/01/01, 112-01-01, 112.01.01)
-    const parts = dateStr.replace(/[^\d]/g, '/').split('/');
-    
-    if (parts.length >= 3) {
-        let year = parseInt(parts[0], 10);
-        const month = parts[1].padStart(2, '0');
-        const day = parts[2].padStart(2, '0');
-        
-        // 判斷邏輯：若年份小於 1911 (通常是 2 或 3 碼)，則視為民國年
-        // 例如 112 -> 2023
-        if (year < 1911) {
-            year += 1911;
-        }
-        
-        return `${year}/${month}/${day}`;
+const debouncedCheckBatchDuplicates = Utils.debounce(() => checkBatchDuplicates(), 500);
+const debouncedCheckEdit = Utils.debounce(() => checkEditDuplicate(), 500);
+
+// --- Core Data Loading ---
+
+async function loadAccounts() {
+    try {
+        const accounts = await API.getAccounts();
+        UI.renderAccountCards(accounts, state.currentFilterAccountId);
+        UI.updateImportSelect(accounts);
+    } catch (e) {
+        UI.showStatus("載入帳戶失敗", 'error');
     }
-    return dateStr; // 若格式無法解析，回傳原值
 }
 
-// --- 帳戶管理功能 (Phase 1) ---
-function openAccModal() {
-    renderAccTable();
-    resetAccForm();
-    accModal.style.display = 'block';
+async function loadTransactions() {
+    try {
+        const txs = await API.getTransactions();
+        // Normalize dates
+        state.allTransactions = txs.map(tx => ({
+            ...tx,
+            trans_date: Utils.normalizeDate(tx.trans_date)
+        }));
+        
+        // Sort
+        state.allTransactions.sort((a, b) => {
+            if (b.trans_date !== a.trans_date) return b.trans_date.localeCompare(a.trans_date);
+            return (b.trans_time || "").localeCompare(a.trans_time || "");
+        });
+
+        if (!state.currentYearMonth) initMonthPicker();
+        renderCurrentView();
+    } catch (e) {
+        UI.showStatus("載入交易失敗", 'error');
+    }
 }
 
-function closeAccModal() {
-    accModal.style.display = 'none';
-    fetchAccounts(); 
+// --- View & Navigation ---
+
+function initMonthPicker() {
+    const today = new Date();
+    const currentYM = Utils.formatDateYM(today);
+    
+    const hasDataCurrentMonth = state.allTransactions.some(tx => {
+        const txYearMonth = tx.trans_date.substring(0, 4) + '-' + tx.trans_date.substring(5, 7);
+        return txYearMonth === currentYM;
+    });
+
+    if (hasDataCurrentMonth || state.allTransactions.length === 0) {
+        state.currentYearMonth = currentYM;
+    } else {
+        const lastTxDate = state.allTransactions[0].trans_date;
+        state.currentYearMonth = lastTxDate.substring(0, 4) + '-' + lastTxDate.substring(5, 7);
+    }
+    els.monthPicker.value = state.currentYearMonth;
 }
 
-function resetAccForm() {
-    document.getElementById('accEditId').value = '';
-    document.getElementById('accName').value = '';
-    document.getElementById('accBankCode').value = '';
-    document.getElementById('accNumber').value = '';
-    document.getElementById('accInitBalance').value = 0;
+window.handleMonthChange = () => {
+    state.currentYearMonth = els.monthPicker.value;
+    renderCurrentView();
+};
+
+window.changeMonth = (step) => {
+    const [y, m] = state.currentYearMonth.split('-');
+    const date = new Date(parseInt(y), parseInt(m) - 1 + step, 1);
+    state.currentYearMonth = Utils.formatDateYM(date);
+    els.monthPicker.value = state.currentYearMonth;
+    renderCurrentView();
+};
+
+window.resetToCurrentMonth = () => {
+    const today = new Date();
+    state.currentYearMonth = Utils.formatDateYM(today);
+    els.monthPicker.value = state.currentYearMonth;
+    renderCurrentView();
+};
+
+window.filterByAccount = (accountId) => {
+    state.currentFilterAccountId = accountId;
+    loadAccounts(); // Refresh cards to show active state
+    renderCurrentView();
+};
+
+window.switchView = (view) => {
+    state.currentView = view;
+    UI.toggleViewSpy(view);
+    renderCurrentView();
+};
+
+function renderCurrentView() {
+    const filtered = getFilteredTransactions();
+    if (state.currentView === 'details') {
+        UI.renderTxTable(filtered);
+    } else {
+        UI.renderStatsTable(filtered);
+    }
 }
 
-async function renderAccTable() {
-    const res = await fetch('/api/accounts');
-    const accounts = await res.json();
-    const tbody = document.querySelector('#accTable tbody');
-    tbody.innerHTML = accounts.map(acc => {
-        const accStr = encodeURIComponent(JSON.stringify(acc));
-        return `
-            <tr>
-                <td>
-                    <div style="font-weight:bold">${acc.account_name}</div>
-                    <small style="color:#888">${acc.bank_code || '-'}</small>
-                </td>
-                <td>
-                    <span style="font-family:monospace; background:#f1f5f9; padding:2px 6px; border-radius:4px;">
-                        ${acc.account_number}
-                    </span>
-                </td>
-                <td>$${acc.balance.toLocaleString()}</td>
-                <td>
-                    <button class="btn-icon edit" onclick="editAccount('${accStr}')">✎</button>
-                    <button class="btn-icon delete" onclick="deleteAccount(${acc.account_id})">🗑️</button>
-                </td>
-            </tr>
-        `;
-    }).join('');
-}
+// --- Account Management ---
 
-function editAccount(accStr) {
+window.openAccModal = async () => {
+    UI.resetAccForm();
+    els.accModal.style.display = 'block';
+    const accounts = await API.getAccounts();
+    UI.renderAccTable(accounts);
+};
+
+window.closeAccModal = () => {
+    els.accModal.style.display = 'none';
+    loadAccounts();
+};
+
+window.editAccount = (accStr) => {
     const acc = JSON.parse(decodeURIComponent(accStr));
     document.getElementById('accEditId').value = acc.account_id;
     document.getElementById('accName').value = acc.account_name;
     document.getElementById('accBankCode').value = acc.bank_code;
     document.getElementById('accNumber').value = acc.account_number;
     document.getElementById('accInitBalance').value = acc.initial_balance;
-}
+};
 
-async function saveAccount() {
+window.saveAccount = async () => {
     const id = document.getElementById('accEditId').value;
     const name = document.getElementById('accName').value;
     const number = document.getElementById('accNumber').value;
     const bankCode = document.getElementById('accBankCode').value;
     const initBalance = parseFloat(document.getElementById('accInitBalance').value);
 
-    if (!name) return alert("請輸入帳戶暱稱");
-    if (!bankCode) return alert("請輸入銀行代碼");
-    if (!number || number.length !== 5 || isNaN(number)) return alert("請輸入 5 碼數字帳號");
+    if (!name || !bankCode || !number || number.length !== 5 || isNaN(number)) {
+        return alert("請檢查輸入資料");
+    }
 
     const payload = { name, number, bank_code: bankCode, init_balance: initBalance };
-    const url = id ? `/api/account/${id}` : '/api/account';
-    const method = id ? 'PUT' : 'POST';
-
-    const res = await fetch(url, {
-        method: method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
     
-    const result = await res.json();
-    if (result.success) {
-        renderAccTable();
-        resetAccForm();
-    } else {
-        alert("錯誤: " + result.message);
-    }
-}
-
-async function deleteAccount(id) {
-    if (!confirm("確定要刪除此帳戶？(若有交易資料將無法刪除)")) return;
-    const res = await fetch(`/api/account/${id}`, { method: 'DELETE' });
-    const result = await res.json();
-    if (result.success) renderAccTable();
-    else alert(result.message);
-}
-
-// --- 首頁帳戶卡片 ---
-async function fetchAccounts() {
-    const res = await fetch('/api/accounts');
-    const accounts = await res.json();
-    // [新增] 更新首頁的「匯入目標帳戶」選單
-    const importSelect = document.getElementById('importAccountSelect');
-    const currentVal = importSelect.value; // 記住目前選擇，避免重整後消失
-    importSelect.innerHTML = '<option value="">-- 請先選擇帳戶 --</option>';
-
-    const container = document.getElementById('account-list');
-    let netWorth = 0;
-    
-    // 1. 計算總淨值
-    accounts.forEach(acc => {
-        netWorth += acc.balance;
-    });
-
-    // 2. 渲染總覽卡片
-    let html = `
-        <div class="account-card ${currentFilterAccountId === null ? 'active' : ''}" 
-             onclick="filterByAccount(null)" style="background: linear-gradient(135deg, #6366f1, #4338ca);">
-            <div class="acc-name">總覽</div>
-            <div class="acc-balance">$${netWorth.toLocaleString()}</div>
-            <div class="acc-number">總資產淨值</div>
-        </div>
-    `;
-
-    // 3. 渲染個別帳戶並填入匯入選單
-    accounts.forEach(acc => {
-        // [新增] 填入匯入選單，並將 bank_code 綁定在 data attribute
-        const option = document.createElement('option');
-        option.value = acc.account_id;
-        option.text = `${acc.account_name} (${acc.account_number}) - ${acc.bank_code}`;
-        option.dataset.bankCode = acc.bank_code; 
-        importSelect.appendChild(option);
-
-        let cardClass = acc.bank_code === '' ? 'acc-card-manual' : '';
-        if (acc.account_name === 'Manual-Import') cardClass = 'acc-card-manual';
-
-        html += `
-            <div class="account-card ${cardClass} ${currentFilterAccountId === acc.account_id ? 'active' : ''}" 
-                 onclick="filterByAccount(${acc.account_id})">
-                <div class="acc-name">${acc.account_name}</div>
-                <div class="acc-balance">$${acc.balance.toLocaleString()}</div>
-                <div class="acc-number">${acc.account_number}</div>
-            </div>
-        `;
-    });
-    
-    container.innerHTML = html;
-    if (currentVal) importSelect.value = currentVal; // 還原選擇
-}
-
-// 切換帳戶篩選
-function filterByAccount(accountId) {
-    currentFilterAccountId = accountId;
-    // document.querySelectorAll('.account-card').forEach(card => card.classList.remove('active'));
-    // 這裡可以用 event.currentTarget 來加 active，或重新 render fetchAccounts (較簡單但較慢)
-    // 為了效能，我們直接重新 fetchAccounts 其實也很快，因為它會重新計算餘額
-    fetchAccounts();
-    renderCurrentView(); // [修改] 改為呼叫通用渲染函式
-}
-
-// --- 交易列表 ---
-async function fetchTransactions() {
-    const res = await fetch('/api/transactions');
-    const rawData = await res.json();
-    // [修改] 載入時將所有日期正規化，確保月份篩選器 (2025-01) 能匹配到資料
-    allTransactions = rawData.map(tx => ({
-        ...tx,
-        trans_date: normalizeDate(tx.trans_date)
-    }));
-    // 前端重新排序 (修正混雜民國年導致的 DB 排序錯誤)
-    allTransactions.sort((a, b) => {
-        // 先比日期 (降序)
-        if (b.trans_date !== a.trans_date) {
-            return b.trans_date.localeCompare(a.trans_date);
-        }
-        // 再比時間 (降序)
-        return (b.trans_time || "").localeCompare(a.trans_time || "");
-    });
-    // 如果是第一次載入 (currentYearMonth 為空)，執行月份初始化
-    if (!currentYearMonth) {
-        initMonthPicker();
-    }
-    
-    // 根據當前模式渲染畫面
-    renderCurrentView();
-}
-
-function renderTable() {
-    // 根據目前選中的帳戶 ID 篩選資料
-    const filteredData = currentFilterAccountId 
-        ? allTransactions.filter(tx => tx.account_id === currentFilterAccountId)
-        : allTransactions;
-
-    const tbody = document.querySelector('#txTable tbody');
-    tbody.innerHTML = filteredData.map(tx => {
-        // ... (原本的表格渲染邏輯，含按鈕) ...
-        const amountClass = tx.amount >= 0 ? 'amount-pos' : 'amount-neg';
-        const displayAmount = (tx.amount >= 0 ? '+' : '') + tx.amount.toLocaleString();
-        const txStr = encodeURIComponent(JSON.stringify(tx));
-
-        return `
-            <tr>
-                <td>
-                    <div style="font-weight:500;">${tx.trans_date}</div>
-                    <div style="font-size:0.75rem; color:var(--text-muted);">${tx.trans_time}</div>
-                </td>
-                <td><b>${tx.summary}</b></td>
-                <td class="${amountClass}">${displayAmount}</td>
-                <td class="ref-text">${tx.ref_no || '-'}</td>
-                <td>
-                    <div class="action-buttons">
-                        <button class="btn-icon edit" onclick="openEditModal('${txStr}')" title="編輯">✎</button>
-                        <button class="btn-icon delete" onclick="deleteTx(${tx.transaction_id})" title="刪除">🗑️</button>
-                    </div>
-                </td>
-            </tr>
-        `;
-    }).join('');
-}
-
-async function deleteTx(id) {
-    if (!confirm("確定要刪除這筆交易嗎？此操作無法復原。")) return;
     try {
-        const res = await fetch(`/api/transaction/${id}`, { method: 'DELETE' });
-        const result = await res.json();
+        const result = id ? await API.updateAccount(id, payload) : await API.createAccount(payload);
         if (result.success) {
-            fetchTransactions(); // 更新列表
-            fetchAccounts(); // 更新餘額
+            UI.resetAccForm();
+            const accounts = await API.getAccounts();
+            UI.renderAccTable(accounts);
         } else {
-            alert("刪除失敗: " + result.message);
+            alert(result.message);
         }
-    } catch (e) {
-        alert("連線錯誤");
-    }
-}
+    } catch (e) { alert("連線錯誤"); }
+};
 
-// --- 編輯交易 ---
-function openEditModal(txStr) {
-    const tx = JSON.parse(decodeURIComponent(txStr));
-    document.getElementById('editId').value = tx.transaction_id;
-    document.getElementById('editAccountId').value = tx.account_id; // [關鍵]
-    document.getElementById('editDate').value = tx.trans_date.replace(/\//g, '-');
-    // [修復] time input 只支援 HH:MM 格式，需要提取前 5 個字符
-    const timeDisplay = (tx.trans_time || '00:00:00').substring(0, 5);
-    document.getElementById('editTime').value = timeDisplay;
-    // [新增] 保存原始完整時間用於 Hash 計算
-    document.getElementById('editTime').dataset.originalTime = tx.trans_time || '00:00:00';
-    document.getElementById('editSummary').value = tx.summary;
-    document.getElementById('editAmount').value = tx.amount;
-    document.getElementById('editRef').value = tx.ref_no || '';
-    // 保存原始值
-    editOriginal = {
-        date: document.getElementById('editDate').value,
-        time: document.getElementById('editTime').value,
-        amount: document.getElementById('editAmount').value,
-        ref: document.getElementById('editRef').value,
-        summary: document.getElementById('editSummary').value
-    };
-    // 重置警示狀態
-    resetEditStatus();
-    editModal.style.display = 'block';
-    // 打開 Modal 後立即執行一次重複檢查
-    setTimeout(() => {
-        checkEditDuplicate();
-        updateEditSaveButton();
-    }, 100);
-}
-
-function closeEditModal() {
-    editModal.style.display = 'none';
-    resetEditStatus();
-}
-
-function resetEditStatus() {
-    editDuplicateAlert.style.display = 'none';
-    btnSaveEdit.disabled = true; // 初始鎖定直到有變更
-    btnSaveEdit.innerText = "儲存";
-    btnSaveEdit.classList.add('btn-disabled');
-    editInputs.forEach(inp => inp.style.borderColor = '#e2e8f0'); // 還原邊框顏色
-    editDuplicateFlag = false;
-}
-
-async function submitEdit() {
-    const id = document.getElementById('editId').value;
-    const accountId = document.getElementById('editAccountId').value; // [新增]
-    const dateInput = document.getElementById('editDate').value; // YYYY-MM-DD
-    const timeInput = document.getElementById('editTime').value; // HH:MM
-    
-    // [修復] 將日期格式轉換為資料庫格式 (YYYY/MM/DD)
-    const date = dateInput.replace(/-/g, '/');
-    // [修復] 如果時間被修改過，使用修改後的時間；否則保留原始完整時間
-    let time = document.getElementById('editTime').dataset.originalTime || '00:00:00';
-    if (timeInput !== time.substring(0, 5)) {
-        // 使用者修改了時間，補充秒數
-        time = timeInput ? timeInput + ':00' : '00:00:00';
-    }
-    
-    const payload = {
-        date: date,
-        time: time,
-        summary: document.getElementById('editSummary').value,
-        amount: parseFloat(document.getElementById('editAmount').value),
-        ref_no: document.getElementById('editRef').value,
-        account_id: parseInt(accountId) // [新增] 後端 Hash 需要
-    };
-    
-    if (!payload.date || isNaN(payload.amount)) return alert("請輸入完整資料");
-
-    // 防呆：未修改或重複時不送出
-    if (!isEditModified()) {
-        return;
-    }
-
-    try {
-        const res = await fetch(`/api/transaction/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const result = await res.json();
-        
-        if (result.success) {
-            closeEditModal();
-            fetchTransactions(); 
-            fetchAccounts();
-        } else {
-            alert("更新失敗: " + result.message);
-        }
-    } catch (e) {
-        alert("連線錯誤");
-    }
-}
-
-// [新增] 檢查單筆編輯是否重複
-async function checkEditDuplicate() {
-    const txId = document.getElementById('editId').value;
-    const accountId = document.getElementById('editAccountId').value;
-    const dateInput = document.getElementById('editDate').value; // YYYY-MM-DD 格式
-    const timeInput = document.getElementById('editTime').value; // HH:MM 格式
-    // const summary = document.getElementById('editSummary').value; // Hash 不包含 summary
-    const amount = parseFloat(document.getElementById('editAmount').value);
-    const ref_no = document.getElementById('editRef').value;
-
-    if (!accountId || !dateInput || isNaN(amount)) return;
-
-    // [修復] 將日期格式轉換為資料庫格式 (YYYY/MM/DD)
-    const date = dateInput.replace(/-/g, '/');
-    // [修復] 如果時間被修改過，使用修改後的時間；否則使用原始完整時間
-    let time = document.getElementById('editTime').dataset.originalTime || '00:00:00';
-    if (timeInput !== time.substring(0, 5)) {
-        // 使用者修改了時間，補充秒數
-        time = timeInput ? timeInput + ':00' : '00:00:00';
-    }
-
-    try {
-        const res = await fetch('/api/check-duplicates', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                account_id: parseInt(accountId),
-                transactions: [{
-                    date: date,
-                    time: time,
-                    amount: amount,
-                    ref_no: ref_no
-                }],
-                exclude_transaction_id: parseInt(txId) // [關鍵] 告訴後端排除自己
-            })
-        });
-        
-        const result = await res.json();
-        if (result.success && result.duplicates[0] === true) {
-            // 發現重複
-            showEditDuplicateError(true);
-        } else {
-            // 沒有重複
-            showEditDuplicateError(false);
-        }
-    } catch (e) {
-        console.error("Check duplicate failed", e);
-    }
-}
-
-function showEditDuplicateError(isDuplicate) {
-    editDuplicateFlag = isDuplicate;
-    if (isDuplicate) {
-        editDuplicateAlert.style.display = 'block';
-        btnSaveEdit.innerText = "重複資料";
-        // 將關鍵欄位標紅
-        document.getElementById('editDate').style.borderColor = 'var(--danger-color)';
-        document.getElementById('editTime').style.borderColor = 'var(--danger-color)';
-        document.getElementById('editAmount').style.borderColor = 'var(--danger-color)';
-        document.getElementById('editRef').style.borderColor = 'var(--danger-color)';
+window.deleteAccount = async (id) => {
+    if (!confirm("確定要刪除？")) return;
+    const res = await API.deleteAccount(id);
+    if (res.success) {
+        const accounts = await API.getAccounts();
+        UI.renderAccTable(accounts);
     } else {
-        editDuplicateAlert.style.display = 'none';
-        btnSaveEdit.innerText = "儲存";
-        editInputs.forEach(inp => inp.style.borderColor = '#e2e8f0');
-    }
-    updateEditSaveButton();
-}
-
-// 判斷是否已修改
-function isEditModified() {
-    if (!editOriginal) return false;
-    return (
-        editOriginal.date !== document.getElementById('editDate').value ||
-        editOriginal.time !== document.getElementById('editTime').value ||
-        editOriginal.amount !== document.getElementById('editAmount').value ||
-        editOriginal.ref !== document.getElementById('editRef').value ||
-        editOriginal.summary !== document.getElementById('editSummary').value
-    );
-}
-
-function markEditDirty() {
-    updateEditSaveButton();
-}
-
-function updateEditSaveButton() {
-    const shouldEnable = !editDuplicateFlag && isEditModified();
-    btnSaveEdit.disabled = !shouldEnable;
-    btnSaveEdit.classList.toggle('btn-disabled', !shouldEnable);
-}
-
-// --- PDF & OCR 上傳 ---
-fileInput.onchange = async (e) => {
-    const files = e.target.files;
-    if (files.length === 0) return;
-
-    // [新增] 強制檢查是否已選擇帳戶
-    const accountSelect = document.getElementById('importAccountSelect');
-    if (!accountSelect.value) {
-        alert("請先選擇「匯入目標帳戶」，系統將根據該帳戶銀行自動決定解析格式。");
-        fileInput.value = ''; // 清空檔案輸入
-        return;
-    }
-
-    // ... (原本的 PDF 與 Image 判斷邏輯保持不變) ...
-    if (files[0].type === "application/pdf") {
-        if (files.length > 1) alert("PDF 請逐一上傳");
-        pwdModal.style.display = 'block';
-        pdfPwdInput.value = '';
-        pdfPwdInput.focus();
-    } else if (files[0].type.startsWith("image/")) {
-        await handleBatchImageUpload(files);
-    } else {
-        alert("不支援的檔案格式");
+        alert(res.message);
     }
 };
 
-btnSubmit.onclick = submitPdfUpload;
-btnCancel.onclick = () => { pwdModal.style.display = 'none'; fileInput.value = ''; };
-pdfPwdInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") submitPdfUpload();
-    if (e.key === "Escape") btnCancel.click();
-});
+// --- Transaction Management (Edit/Delete) ---
 
-async function submitPdfUpload() {
-    if (isPdfUploading) return;
+window.deleteTx = async (id) => {
+    if (!confirm("確定刪除？")) return;
+    const res = await API.deleteTransaction(id);
+    if (res.success) {
+        loadTransactions();
+        loadAccounts(); // Recalculate balance
+    } else {
+        alert("刪除失敗");
+    }
+};
 
-    const password = pdfPwdInput.value;
-    if (!password) return alert("請輸入密碼"); // 簡易防呆
-
-    // [修改] 從選擇的帳戶中取得 bank_code
-    const accountSelect = document.getElementById('importAccountSelect');
-    // 防呆：雖然 onchange 擋過了，但以防萬一
-    if (!accountSelect.value) return alert("請選擇匯入帳戶");
-
-    isPdfUploading = true;
-
-    btnSubmit.disabled = true;
-    btnSubmit.innerText = "⏳ 處理中...";
-
-    const bankCode = accountSelect.options[accountSelect.selectedIndex].dataset.bankCode;
-
-    const formData = new FormData();
-    formData.append('file', fileInput.files[0]);
-    formData.append('password', pdfPwdInput.value);
-    formData.append('bank_code', bankCode); // [新增] 加入 FormData
+window.openEditModal = (txStr) => {
+    const tx = JSON.parse(decodeURIComponent(txStr));
+    UI.populateEditModal(tx);
     
-    pwdModal.style.display = 'none';
-    statusMsg.innerText = "正在解析 PDF...";
+    // Save original state for comparison
+    state.editOriginal = {
+        date: els.editDate.value,
+        time: els.editTime.value,
+        amount: els.editAmount.value,
+        ref: els.editRef.value,
+        summary: els.editSummary.value
+    };
+    
+    state.editDuplicateFlag = false;
+    UI.showEditDuplicateError(false);
+    updateEditSaveState();
+    
+    els.editModal.style.display = 'block';
+    // Immediate check
+    setTimeout(() => { checkEditDuplicate(); }, 100);
+};
+
+window.closeEditModal = () => {
+    els.editModal.style.display = 'none';
+};
+
+window.submitEdit = async () => {
+    const form = UI.getEditFormData();
+    
+    // Date/Time logic
+    const date = form.date.replace(/-/g, '/');
+    let time = form.originalTime || '00:00:00';
+    if (form.timeDisplay !== time.substring(0, 5)) {
+        time = form.timeDisplay ? form.timeDisplay + ':00' : '00:00:00';
+    }
+
+    const payload = {
+        date, time,
+        summary: form.summary,
+        amount: parseFloat(form.amount),
+        ref_no: form.ref_no,
+        account_id: parseInt(form.accountId)
+    };
+
+    if (!payload.date || isNaN(payload.amount)) return alert("資料不全");
 
     try {
-        // 1. 呼叫預覽 API
-        const res = await fetch('/api/pdf-preview', { method: 'POST', body: formData });
-        const result = await res.json();
-        
-        if (result.success) {
-            statusMsg.innerText = "✅ 解析完成，請確認歸戶";
-            openPdfConfirmModal(result.data);
+        const res = await API.updateTransaction(form.id, payload);
+        if (res.success) {
+            window.closeEditModal();
+            loadTransactions();
+            loadAccounts();
         } else {
-            statusMsg.innerText = "❌ " + result.message;
+            alert(res.message);
         }
-    } catch (err) {
-        statusMsg.innerText = "連線錯誤";
+    } catch (e) { alert("更新失敗"); }
+};
+
+function isEditModified() {
+    if (!state.editOriginal) return false;
+    return (
+        state.editOriginal.date !== els.editDate.value ||
+        state.editOriginal.time !== els.editTime.value ||
+        state.editOriginal.amount !== els.editAmount.value ||
+        state.editOriginal.ref !== els.editRef.value ||
+        state.editOriginal.summary !== els.editSummary.value
+    );
+}
+
+function updateEditSaveState() {
+    const shouldEnable = !state.editDuplicateFlag && isEditModified();
+    UI.updateEditSaveButton(shouldEnable);
+}
+
+async function checkEditDuplicate() {
+    const form = UI.getEditFormData();
+    if (!form.accountId || !form.date || isNaN(form.amount)) return;
+
+    const date = form.date.replace(/-/g, '/');
+    let time = form.originalTime || '00:00:00';
+    if (form.timeDisplay !== time.substring(0, 5)) time = form.timeDisplay + ':00';
+
+    try {
+        const res = await API.checkDuplicates({
+            account_id: parseInt(form.accountId),
+            transactions: [{ date, time, amount: parseFloat(form.amount), ref_no: form.ref_no }],
+            exclude_transaction_id: parseInt(form.id)
+        });
+        
+        state.editDuplicateFlag = (res.success && res.duplicates[0] === true);
+        UI.showEditDuplicateError(state.editDuplicateFlag);
+        updateEditSaveState();
+    } catch (e) { console.error(e); }
+}
+
+// --- Imports (PDF / OCR) ---
+
+els.fileInput.onchange = async (e) => {
+    const files = e.target.files;
+    if (files.length === 0) return;
+    
+    if (!els.importAccountSelect.value) {
+        alert("請先選擇「匯入目標帳戶」");
+        els.fileInput.value = '';
+        return;
+    }
+
+    if (files[0].type === "application/pdf") {
+        if (files.length > 1) return alert("PDF 請逐一上傳");
+        els.pwdModal.style.display = 'block';
+        document.getElementById('pdfPwd').value = '';
+        document.getElementById('pdfPwd').focus();
+    } else if (files[0].type.startsWith("image/")) {
+        await handleBatchImageUpload(files);
+    } else {
+        alert("不支援格式");
+    }
+};
+
+// PDF Logic
+document.getElementById('btnSubmit').onclick = async () => {
+    if (state.isPdfUploading) return;
+    const pwd = document.getElementById('pdfPwd').value;
+    if (!pwd) return alert("請輸入密碼");
+    
+    const accountSelect = els.importAccountSelect;
+    const bankCode = accountSelect.options[accountSelect.selectedIndex].dataset.bankCode;
+
+    state.isPdfUploading = true;
+    const btn = document.getElementById('btnSubmit');
+    btn.disabled = true; btn.innerText = "⏳處理中...";
+    els.pwdModal.style.display = 'none';
+    UI.showStatus("正在解析 PDF...");
+
+    try {
+        const formData = new FormData();
+        formData.append('file', els.fileInput.files[0]);
+        formData.append('password', pwd);
+        formData.append('bank_code', bankCode);
+
+        const res = await API.previewPdf(formData);
+        if (res.success) {
+            UI.showStatus("✅ 解析完成", 'success');
+            openPdfConfirmModal(res.data);
+        } else {
+            UI.showStatus("❌ " + res.message, 'error');
+        }
+    } catch (e) {
+        UI.showStatus("連線錯誤", 'error');
     } finally {
-        // 3. 解除鎖定 (無論成功失敗都要解除，並恢復按鈕)
-        isPdfUploading = false;
-        btnSubmit.disabled = false;
-        btnSubmit.innerText = "確認上傳";
+        state.isPdfUploading = false;
+        btn.disabled = false; btn.innerText = "確認上傳";
     }
-}
+};
 
+document.getElementById('btnCancel').onclick = () => {
+    els.pwdModal.style.display = 'none'; els.fileInput.value = '';
+};
+
+// PDF Confirm Modal
 async function openPdfConfirmModal(data) {
-    // [新增] 顯示選定的帳戶名稱
-    const accountSelect = document.getElementById('importAccountSelect');
-    const accountName = accountSelect.options[accountSelect.selectedIndex].text;
-    document.getElementById('pdfTargetAccountDisplay').innerText = accountName;
-    // [修改] 在接收資料時，先遍歷並正規化日期
-    pendingPdfTransactions = data.transactions.map(tx => ({
+    const accountSelect = els.importAccountSelect;
+    document.getElementById('pdfTargetAccountDisplay').innerText = accountSelect.options[accountSelect.selectedIndex].text;
+    
+    state.pendingPdfTransactions = data.transactions.map(tx => ({
         ...tx,
-        date: normalizeDate(tx.date) // 轉為西元年
+        date: Utils.normalizeDate(tx.date)
     }));
-    
-    // UI 顯示偵測結果
-    document.getElementById('pdfDetectedAcc').innerText = data.account_number || "未知";
-    document.getElementById('pdfTxCount').innerText = `共 ${data.count} 筆交易`;
 
-    // 準備下拉選單
-    const select = document.getElementById('pdfTargetAccount');
-    select.innerHTML = '<option value="">-- 請選擇歸戶帳戶 --</option>';
-    
-    // 取得最新帳戶列表 (為了確保資料同步，這裡可以再 fetch 一次，或者用全域變數)
-    const res = await fetch('/api/accounts');
-    const accounts = await res.json();
-    
-    let matchedId = "";
-
-    accounts.forEach(acc => {
-        const option = document.createElement('option');
-        option.value = acc.account_id;
-        // 顯示格式： 暱稱 (末5碼) - 銀行代碼
-        option.text = `${acc.account_name} (${acc.account_number}) - ${acc.bank_code}`;
-        select.appendChild(option);
-
-        // [關鍵邏輯] 自動匹配
-        // 如果 PDF 偵測到的號碼 (例如 "345") 是帳戶號碼 (例如 "12345") 的結尾
-        if (data.account_number && acc.account_number.endsWith(data.account_number)) {
-            matchedId = acc.account_id;
-        }
-    });
-
-    // 如果有匹配到，自動選取
-    if (matchedId) {
-        select.value = matchedId;
-    }
-
-    pdfConfirmModal.style.display = 'block';
+    // Auto-match removed since we now force user to select account upfront, 
+    // but the modal logic remains for confirmation (simplified).
+    els.pdfConfirmModal.style.display = 'block';
 }
 
-function closePdfConfirmModal() {
-    pdfConfirmModal.style.display = 'none';
-    fileInput.value = '';
-    pendingPdfTransactions = [];
-}
+window.closePdfConfirmModal = () => {
+    els.pdfConfirmModal.style.display = 'none';
+    els.fileInput.value = '';
+    state.pendingPdfTransactions = [];
+};
 
-async function savePdfBatch() {
-    // [修改] 從首頁選單取得 ID
-    const accountId = document.getElementById('importAccountSelect').value;
-    if (!accountId) return alert("錯誤：未選擇帳戶");
-    
-    // if (!accountId) {
-    //     alert("請選擇一個匯入目標帳戶！若無帳戶請先至「帳戶管理」新增。");
-    //     return;
-    // }
-
+window.savePdfBatch = async () => {
+    const accountId = els.importAccountSelect.value;
     const btn = document.getElementById('btnPdfSave');
     btn.innerText = "⏳ 匯入中..."; btn.disabled = true;
 
     try {
-        const payload = {
+        const res = await API.saveBatch({
             account_id: parseInt(accountId),
-            transactions: pendingPdfTransactions
-        };
-
-        const res = await fetch('/api/save-batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            transactions: state.pendingPdfTransactions
         });
-        
-        const result = await res.json();
-        
-        if (result.success) {
-            closePdfConfirmModal();
-            statusMsg.innerText = "✅ " + result.message;
-            fetchAccounts();     // 更新餘額
-            fetchTransactions(); // 更新列表
+        if (res.success) {
+            window.closePdfConfirmModal();
+            UI.showStatus("✅ " + res.message, 'success');
+            loadAccounts();
+            loadTransactions();
         } else {
-            alert("匯入失敗: " + result.message);
+            alert("匯入失敗: " + res.message);
         }
-    } catch (e) {
-        alert("連線錯誤");
-    } finally {
-        btn.innerText = "確認匯入"; btn.disabled = false;
-    }
-}
-// [修改] handleBatchImageUpload：優化進度提示
+    } catch (e) { alert("連線錯誤"); }
+    finally { btn.innerText = "確認匯入"; btn.disabled = false; }
+};
+
+// OCR Logic
 async function handleBatchImageUpload(files) {
-    const accountSelect = document.getElementById('importAccountSelect');
+    const accountSelect = els.importAccountSelect;
     const bankCode = accountSelect.options[accountSelect.selectedIndex].dataset.bankCode;
     const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
-        formData.append('files', files[i]);
-    }
-    formData.append('bank_code', bankCode); // [新增] 加入銀行代碼到 FormData
-    // 即時提示
-    UI.showStatus(`⏳ 正在上傳並辨識 ${files.length} 張圖片...`, 'info');
+    for (let i = 0; i < files.length; i++) formData.append('files', files[i]);
+    formData.append('bank_code', bankCode);
+
+    UI.showStatus(`⏳ 辨識中 (${files.length} 張)...`);
     
     try {
-        const res = await fetch('/api/ocr-identify', { method: 'POST', body: formData });
-        
-        if (!res.ok) {
-           // ... (原本的錯誤處理邏輯) ...
-           UI.showStatus(`❌ 請求失敗: ${res.statusText}`, 'error');
-           return;
-        }
-
-        const result = await res.json();
-        
-        if (result.success) {
-            UI.showStatus("✅ 辨識完成，請在視窗中校對", 'success');
-            openOcrBatchModal(result.data);
+        const res = await API.identifyOcr(formData);
+        if (res.success) {
+            UI.showStatus("✅ 辨識完成", 'success');
+            openOcrBatchModal(res.data);
         } else {
-            const msg = result.message || JSON.stringify(result);
-            UI.showStatus("❌ 辨識失敗：" + msg, 'error');
+            UI.showStatus("❌ 辨識失敗: " + res.message, 'error');
         }
-    } catch (err) {
-        console.error(err);
-        UI.showStatus("❌ 連線錯誤", 'error');
-    }
-    // 注意：這裡不設 autoHide，因為使用者還在操作，直到他關閉視窗或完成
+    } catch (e) { UI.showStatus("❌ 連線錯誤", 'error'); }
 }
 
-async function openOcrBatchModal(items) {
-    // [修改] 顯示選定的帳戶名稱
-    const accountSelect = document.getElementById('importAccountSelect');
-    const accountName = accountSelect.options[accountSelect.selectedIndex].text;
-    document.getElementById('ocrTargetAccountDisplay').innerText = accountName;
-
-    // 渲染卡片
-    renderBatchCards(items);
+function openOcrBatchModal(items) {
+    const accountSelect = els.importAccountSelect;
+    document.getElementById('ocrTargetAccountDisplay').innerText = accountSelect.options[accountSelect.selectedIndex].text;
     
-    // 預先正規化日期 (若有需要)
-    items.forEach(item => {
-        item.date = normalizeDate(item.date);
-    });
-    
-    // 直接執行一次檢查重複 (因為帳戶已確定)
+    items.forEach(item => item.date = Utils.normalizeDate(item.date));
+    UI.renderBatchCards(items);
     checkBatchDuplicates();
-
-    ocrBatchModal.style.display = 'block';
+    els.ocrBatchModal.style.display = 'block';
 }
 
-// [新增] 渲染卡片獨立函數 (方便重繪)
-function renderBatchCards(items) {
-    ocrBatchList.innerHTML = '';
-    items.forEach((item, index) => {
-        const card = createOcrCard(item, index);
-        ocrBatchList.appendChild(card);
-    });
-}
+window.closeOcrBatchModal = () => {
+    els.ocrBatchModal.style.display = 'none';
+    els.fileInput.value = '';
+    UI.clearStatus();
+};
 
-// [新增] 檢查重複功能
+window.removeOcrCard = (btn) => {
+    btn.closest('.ocr-card').remove();
+};
+
 async function checkBatchDuplicates() {
-    // [修改] 來源改為首頁選單
-    const accountId = document.getElementById('importAccountSelect').value;
-    if (!accountId) return; // 沒選帳戶無法計算 Hash
+    const accountId = els.importAccountSelect.value;
+    if (!accountId) return;
 
-    // 1. 收集目前畫面上的資料
-    const cards = document.querySelectorAll('.ocr-card');
-    const transactions = [];
-    cards.forEach(card => {
-        transactions.push({
-            date: card.querySelector('.inp-date').value,
-            time: card.querySelector('.inp-time').value,
-            // summary 不影響 hash 但為了完整性
-            amount: parseFloat(card.querySelector('.inp-amount').value),
-            ref_no: card.querySelector('.inp-ref').value
-        });
-    });
-
+    const transactions = UI.getBatchTransactions();
     if (transactions.length === 0) return;
 
     try {
-        const res = await fetch('/api/check-duplicates', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ account_id: accountId, transactions: transactions })
+        const res = await API.checkDuplicates({
+            account_id: accountId,
+            transactions: transactions
         });
-        const result = await res.json();
-
-        if (result.success) {
-            // 2. 根據結果更新 UI
-            const duplicates = result.duplicates; // [true, false, ...]
-            cards.forEach((card, index) => {
-                if (duplicates[index]) {
-                    card.classList.add('duplicate');
-                    if (!card.querySelector('.duplicate-badge')) {
-                        const badge = document.createElement('div');
-                        badge.className = 'duplicate-badge';
-                        badge.innerText = '⚠️ 已存在';
-                        card.appendChild(badge);
-                    }
-                } else {
-                    card.classList.remove('duplicate');
-                    const badge = card.querySelector('.duplicate-badge');
-                    if (badge) badge.remove();
-                }
-            });
+        if (res.success) {
+            UI.updateBatchDuplicates(res.duplicates);
         }
-    } catch (e) {
-        console.error("Check duplicate failed", e);
-    }
+    } catch (e) { console.error(e); }
 }
 
-// [修改] 關閉 Modal 時清除狀態
-function closeOcrBatchModal() {
-    ocrBatchModal.style.display = 'none';
-    fileInput.value = '';
-    UI.clearStatus(); // 清除提示
-}
-
-// 建立單張卡片的 HTML
-function createOcrCard(item, index) {
-    const div = document.createElement('div');
-    div.className = 'ocr-card';
-    div.dataset.index = index; // 用於標記
-
-    // 刪除按鈕
-    div.innerHTML = `
-        <button class="ocr-card-del" onclick="removeOcrCard(this)" title="移除此筆">✕</button>
-        <div class="ocr-grid">
-            <div>
-                <label>日期</label>
-                <input type="text" class="inp-date" value="${item.date || ''}" placeholder="YYYY/MM/DD">
-            </div>
-            <div>
-                <label>時間</label>
-                <input type="text" class="inp-time" value="${item.time || ''}" placeholder="HH:MM:SS">
-            </div>
-            <div class="ocr-full-width">
-                <label>摘要</label>
-                <input type="text" class="inp-summary" value="${item.summary || ''}">
-            </div>
-            <div>
-                <label>金額 (支出為負)</label>
-                <input type="number" class="inp-amount" value="${item.amount || 0}">
-            </div>
-            <div>
-                <label>交易序號</label>
-                <input type="text" class="inp-ref" value="${item.ref_no || ''}">
-            </div>
-        </div>
-    `;
-    return div;
-}
-
-// 移除卡片
-window.removeOcrCard = function(btn) {
-    const card = btn.closest('.ocr-card');
-    card.remove();
-};
-
-// 確認全部匯入
-async function saveOcrBatch() {
-    // [修改] 來源改為首頁選單
-    const accountId = document.getElementById('importAccountSelect').value;
-    if (!accountId) return alert("錯誤：未選擇帳戶");
-
-    const cards = document.querySelectorAll('.ocr-card');
-    if (cards.length === 0) return alert("沒有可匯入的交易資料");
-
-    // 收集資料
-    const transactions = [];
-    cards.forEach(card => {
-        const date = card.querySelector('.inp-date').value;
-        const time = card.querySelector('.inp-time').value;
-        const summary = card.querySelector('.inp-summary').value;
-        const amount = parseFloat(card.querySelector('.inp-amount').value);
-        const ref_no = card.querySelector('.inp-ref').value;
-
-        // 簡單驗證
-        if (date && !isNaN(amount)) {
-            transactions.push({ date, time, summary, amount, ref_no });
-        }
-    });
+window.saveOcrBatch = async () => {
+    const accountId = els.importAccountSelect.value;
+    const transactions = UI.getBatchTransactions().filter(t => t.date && !isNaN(t.amount));
+    
+    if (transactions.length === 0) return alert("無有效資料");
 
     const btn = document.getElementById('btnBatchSave');
     btn.innerText = "⏳ 匯入中..."; btn.disabled = true;
 
     try {
-        // 重用 PDF 的批次儲存 API
-        const payload = {
+        const res = await API.saveBatch({
             account_id: parseInt(accountId),
             transactions: transactions
-        };
-
-        const res = await fetch('/api/save-batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
         });
-        const result = await res.json();
-
-        if (result.success) {
-            closeOcrBatchModal();
-            // 使用自動隱藏的成功訊息
-            UI.showStatus("✅ " + result.message, 'success', true);
-            fetchTransactions();
-            fetchAccounts();
+        if (res.success) {
+            window.closeOcrBatchModal();
+            UI.showStatus("✅ " + res.message, 'success', true);
+            loadTransactions();
+            loadAccounts();
         } else {
-            alert("匯入失敗: " + result.message);
+            alert(res.message);
         }
-    } catch (e) {
-        alert("連線錯誤");
-    } finally {
-        btn.innerText = "確認全部匯入"; btn.disabled = false;
-    }
-}
-
-// OCR 校對框操作
-btnOcrSave.onclick = saveOcrResult;
-btnOcrCancel.onclick = () => { ocrModal.style.display = 'none'; fileInput.value = ''; };
-
-pdfPwdInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-        // [關鍵修正] 阻止瀏覽器預設行為 (避免 Enter 同時觸發按鈕點擊)
-        e.preventDefault(); 
-        submitPdfUpload(); 
-    }
-    if (e.key === "Escape") closeModal();
-});
-
-async function closeModal() {
-    ocrModal.style.display = 'none';
-    fileInput.value = '';
-}
-
-// --- 核心功能函數 ---
-
-async function saveOcrResult() {
-    const data = {
-        account_number: document.getElementById('ocrAccount').value,
-        date: document.getElementById('ocrDate').value,
-        time: document.getElementById('ocrTime').value,
-        summary: document.getElementById('ocrSummary').value,
-        amount: parseFloat(document.getElementById('ocrAmount').value),
-        ref_no: document.getElementById('ocrRef').value
-    };
-
-    // 1. UX 優化：鎖定按鈕並顯示處理中
-    const btnSave = document.getElementById('btnOcrSave');
-    const originalText = btnSave.innerText;
-    btnSave.innerText = "⏳ 儲存中...";
-    btnSave.disabled = true;
-    ocrErrorMsg.innerText = ""; // 清空舊的錯誤訊息
-
-    try {
-        const res = await fetch('/api/save-manual', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        const result = await res.json();
-        
-        if (result.success) {
-            // 成功：關閉 Modal 並刷新
-            ocrModal.style.display = 'none';
-            fileInput.value = ''; 
-            statusMsg.innerText = "✅ 單筆交易存入成功！";
-            fetchTransactions(); // 更新列表
-            fetchAccounts(); // 更新餘額
-        } else {
-            // 失敗：顯示錯誤在 Modal 內，不關閉視窗
-            // 這樣使用者可以看到 "重複匯入" 的訊息，決定要取消還是改序號
-            ocrErrorMsg.innerText = "❌ " + result.message;
-        }
-    } catch (err) {
-        ocrErrorMsg.innerText = "❌ 連線錯誤，請稍後再試";
-    } finally {
-        // 2. 恢復按鈕狀態
-        btnSave.innerText = originalText;
-        btnSave.disabled = false;
-    }
-}
-
-// 初始化載入
-document.addEventListener('DOMContentLoaded', fetchTransactions);
-
-// ==========================================
-//  新增功能：月報表篩選與統計模式
-// ==========================================
-
-// --- 1. 月份篩選邏輯 ---
-
-function initMonthPicker() {
-    const today = new Date();
-    const currentYM = formatDateYM(today); // "2025-01"
-    
-    // 檢查當前月份是否有資料 (正確比對日期格式)
-    const hasDataCurrentMonth = allTransactions.some(tx => {
-        const txYearMonth = tx.trans_date.substring(0, 4) + '-' + tx.trans_date.substring(5, 7);
-        return txYearMonth === currentYM;
-    });
-    
-    if (hasDataCurrentMonth || allTransactions.length === 0) {
-        currentYearMonth = currentYM;
-    } else {
-        // 若本月無資料，找最近一個有資料的月份
-        // allTransactions 已依日期排序 (DESC)，取第一筆的年月
-        const lastTxDate = allTransactions[0].trans_date;
-        currentYearMonth = lastTxDate.substring(0, 4) + '-' + lastTxDate.substring(5, 7);
-    }
-    
-    document.getElementById('monthPicker').value = currentYearMonth;
-}
-
-function formatDateYM(date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    return `${y}-${m}`;
-}
-
-function handleMonthChange() {
-    currentYearMonth = document.getElementById('monthPicker').value;
-    renderCurrentView();
-}
-
-function changeMonth(step) {
-    const [y, m] = currentYearMonth.split('-');
-    const date = new Date(parseInt(y), parseInt(m) - 1 + step, 1);
-    
-    currentYearMonth = formatDateYM(date);
-    document.getElementById('monthPicker').value = currentYearMonth;
-    renderCurrentView();
-}
-
-function resetToCurrentMonth() {
-    const today = new Date();
-    currentYearMonth = formatDateYM(today);
-    document.getElementById('monthPicker').value = currentYearMonth;
-    renderCurrentView();
-}
-
-// 取得當前篩選條件下的資料 (帳戶 + 月份)
-function getFilteredTransactions() {
-    return allTransactions.filter(tx => {
-        // 1. 帳戶篩選
-        const matchAccount = currentFilterAccountId === null || tx.account_id === currentFilterAccountId;
-        // 2. 月份篩選 (將 "2025/12/31" 轉為 "2025-12" 後比對)
-        const txYearMonth = tx.trans_date.substring(0, 4) + '-' + tx.trans_date.substring(5, 7);
-        const matchMonth = txYearMonth === currentYearMonth;
-        
-        return matchAccount && matchMonth;
-    });
-}
-
-// --- 2. 視圖切換與渲染 ---
-
-function switchView(view) {
-    currentView = view;
-    
-    // UI 按鈕狀態更新
-    document.getElementById('btnViewDetails').classList.toggle('active', view === 'details');
-    document.getElementById('btnViewStats').classList.toggle('active', view === 'stats');
-    
-    // 區塊顯示切換
-    document.getElementById('view-details').style.display = view === 'details' ? 'block' : 'none';
-    document.getElementById('view-stats').style.display = view === 'stats' ? 'block' : 'none';
-    
-    renderCurrentView();
-}
-
-function renderCurrentView() {
-    // 根據當前模式決定呼叫哪個渲染函式
-    if (currentView === 'details') {
-        renderDetailsTable();
-    } else {
-        renderStatsTable();
-    }
-}
-
-// [替代原本的 renderTable]
-function renderDetailsTable() {
-    const filteredData = getFilteredTransactions(); 
-
-    const tbody = document.querySelector('#txTable tbody');
-    const noDataMsg = document.getElementById('noDataMsg');
-    
-    if (filteredData.length === 0) {
-        tbody.innerHTML = '';
-        noDataMsg.style.display = 'block';
-        return;
-    }
-    
-    noDataMsg.style.display = 'none';
-    tbody.innerHTML = filteredData.map(tx => {
-        const amountClass = tx.amount >= 0 ? 'amount-pos' : 'amount-neg';
-        const displayAmount = (tx.amount >= 0 ? '+' : '') + tx.amount.toLocaleString();
-        const txStr = encodeURIComponent(JSON.stringify(tx));
-
-        return `
-            <tr>
-                <td>
-                    <div style="font-weight:500;">${tx.trans_date}</div>
-                    <div style="font-size:0.75rem; color:var(--text-muted);">${tx.trans_time}</div>
-                </td>
-                <td><b>${tx.summary}</b></td>
-                <td class="${amountClass}">${displayAmount}</td>
-                <td class="ref-text">${tx.ref_no || '-'}</td>
-                <td>
-                    <div class="action-buttons">
-                        <button class="btn-icon edit" onclick="openEditModal('${txStr}')" title="編輯">✎</button>
-                        <button class="btn-icon delete" onclick="deleteTx(${tx.transaction_id})" title="刪除">🗑️</button>
-                    </div>
-                </td>
-            </tr>
-        `;
-    }).join('');
-}
-
-// --- 3. 統計模式邏輯 ---
-
-function renderStatsTable() {
-    const filteredData = getFilteredTransactions();
-    
-    // 分組加總邏輯
-    const incomeMap = {};
-    const expenseMap = {};
-    let inc = 0, exp = 0; // 用於統計標題顯示
-    
-    filteredData.forEach(tx => {
-        // 嚴格比對 (去空白)
-        const name = tx.summary.trim(); 
-        const amt = tx.amount;
-        
-        if (amt >= 0) {
-            inc += amt;
-            if (!incomeMap[name]) incomeMap[name] = { count: 0, total: 0 };
-            incomeMap[name].count++;
-            incomeMap[name].total += amt;
-        } else {
-            exp += amt;
-            if (!expenseMap[name]) expenseMap[name] = { count: 0, total: 0 };
-            expenseMap[name].count++;
-            expenseMap[name].total += amt; 
-        }
-    });
-
-    const incomeTotalEl = document.getElementById('stats-income-total');
-    const expenseTotalEl = document.getElementById('stats-expense-total');
-    if (incomeTotalEl) incomeTotalEl.textContent = `總計：$${inc.toLocaleString()}`;
-    if (expenseTotalEl) expenseTotalEl.textContent = `總計：$${exp.toLocaleString()}`;
-    
-    // 轉換為陣列並排序
-    const incomeList = Object.entries(incomeMap)
-        .map(([name, stat]) => ({ name, ...stat }))
-        .sort((a, b) => b.total - a.total); 
-        
-    const expenseList = Object.entries(expenseMap)
-        .map(([name, stat]) => ({ name, ...stat }))
-        .sort((a, b) => a.total - b.total); // 負值越小代表支出越多
-    
-    // 渲染 HTML
-    const renderRows = (list, isExpense) => {
-        if (list.length === 0) return `<tr><td colspan="3" style="text-align:center;color:#999;padding:15px;">無資料</td></tr>`;
-        
-        return list.map(item => `
-            <tr>
-                <td style="font-weight:bold;">${item.name}</td>
-                <td style="color:#666;">${item.count} 筆</td>
-                <td style="text-align:right; font-family:monospace; font-weight:bold;" class="${isExpense ? 'amount-neg' : 'amount-pos'}">
-                    ${item.total.toLocaleString()}
-                </td>
-            </tr>
-        `).join('');
-    };
-    
-    document.querySelector('#statsTableIncome tbody').innerHTML = renderRows(incomeList, false);
-    document.querySelector('#statsTableExpense tbody').innerHTML = renderRows(expenseList, true);
-}
+    } catch (e) { alert("連線錯誤"); }
+    finally { btn.innerText = "確認全部匯入"; btn.disabled = false; }
+};
