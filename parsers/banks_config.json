@@ -1,0 +1,30 @@
+{
+  "700": {
+    "name": "Post Office",
+    "regex_pattern": "(\\d{3}/\\d{2}/\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2})\\s+(\\S+)\\s+(.*?)\\s+([\\d,]+)(?=\\n|$)",
+    "groups": {
+      "date": 1,
+      "time": 2,
+      "summary": 3,
+      "ref": 4,
+      "amount": 5
+    },
+    "income_keywords": ["薪資", "利息", "轉入", "存入", "退款"],
+    "account_pattern": "帳\\s+號[:：\\s]*([\\d\\*\\-]+)",
+    "account_group": 1
+  },
+  "050": {
+    "name": "Taiwan Business Bank",
+    "regex_pattern": "(\\d{3,4}/\\d{2}/\\d{2})\\s+([^\\s\\d]+)\\s+([\\d,]+)(?=\\s|$)",
+    "groups": {
+      "date": 1,
+      "summary": 2,
+      "amount": 3,
+      "time": null,
+      "ref": null
+    },
+    "expense_keywords": ["支出", "提款", "扣款"],
+    "account_pattern": "(?:帳號|050)[:\\-\\s]*[\\d]+(\\d{5})",
+    "account_group": 1
+  }
+}

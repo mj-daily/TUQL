@@ -2,7 +2,9 @@ import re
 import pdfplumber
 from .base import BankParser
 from .utils import reader, preprocess_image
+from .registry import register_parser
 
+@register_parser('050')
 class TBBParser(BankParser):
     """台灣企銀 (050) 解析器"""
     
