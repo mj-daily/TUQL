@@ -1,10 +1,9 @@
 from fastapi import APIRouter, UploadFile, File, Form, Body
 from typing import List
-import sqlite3
-import hashlib
 import io
 import parser
 from database import get_db_connection
+from services import transaction_service
 
 router = APIRouter()
 
@@ -40,22 +39,7 @@ async def save_batch(payload: dict = Body(...)):
     if not account_id:
         return {"success": False, "message": "未指定匯入帳戶"}
 
-    saved_count = 0
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        
-        for tx in transactions:
-            raw_id = f"BATCH|{account_id}|{tx['date']}|{tx['time']}|{tx['ref_no']}|{tx['amount']}"
-            t_hash = hashlib.sha256(raw_id.encode()).hexdigest()
-            
-            try:
-                cursor.execute("""
-                    INSERT INTO transactions (account_id, trans_date, trans_time, summary, ref_no, amount, trace_hash)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (account_id, tx['date'], tx['time'], tx['summary'], tx['ref_no'], tx['amount'], t_hash))
-                saved_count += 1
-            except sqlite3.IntegrityError:
-                continue 
+    saved_count = transaction_service.create_transactions_batch(account_id, transactions, "BATCH")
 
     return {"success": True, "message": f"成功匯入 {saved_count} 筆 (共 {len(transactions)} 筆)"}
 
@@ -103,14 +87,17 @@ async def save_manual(payload: dict = Body(...)):
                            ("中華郵政(OCR)", target_acc_num))
             account_id = cursor.lastrowid
         
-        raw_id = f"MANUAL|{account_id}|{payload['date']}|{payload['time']}|{payload['amount']}|{payload['ref_no']}"
-        t_hash = hashlib.sha256(raw_id.encode()).hexdigest()
-        
-        try:
-            cursor.execute("""
-                INSERT INTO transactions (account_id, trans_date, trans_time, summary, ref_no, amount, trace_hash)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (account_id, payload['date'], payload['time'], payload['summary'], payload['ref_no'], payload['amount'], t_hash))
-            return {"success": True}
-        except sqlite3.IntegrityError:
-            return {"success": False, "message": "此筆資料已存在"}
+    success, msg = transaction_service.create_transaction(
+        account_id,
+        payload['date'],
+        payload['time'],
+        payload['summary'],
+        payload['ref_no'],
+        payload['amount'],
+        "MANUAL"
+    )
+    
+    if success:
+        return {"success": True}
+    else:
+        return {"success": False, "message": msg or "此筆資料已存在"}

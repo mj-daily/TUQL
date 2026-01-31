@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Body
-import sqlite3
-import hashlib
 from database import get_db_connection
+from services import transaction_service
 
 router = APIRouter()
 
@@ -40,33 +39,14 @@ async def edit_transaction(tx_id: int, item: dict = Body(...)):
     ref_no = item.get("ref_no", "")
     account_id = item.get("account_id") 
 
-    raw_id = f"MANUAL|{account_id}|{date}|{time}|{amount}|{ref_no}"
-    new_hash = hashlib.sha256(raw_id.encode()).hexdigest()
-
     try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            
-            cursor.execute("""
-                SELECT transaction_id FROM transactions 
-                WHERE trace_hash = ? AND transaction_id != ?
-            """, (new_hash, tx_id))
-            collision = cursor.fetchone()
-            
-            if collision:
-                return {"success": False, "message": "修改後的資料與現有交易重複，無法儲存。"}
-
-            cursor.execute("""
-                UPDATE transactions 
-                SET trans_date=?, trans_time=?, summary=?, amount=?, ref_no=?, trace_hash=?
-                WHERE transaction_id=?
-            """, (date, time, summary, amount, ref_no, new_hash, tx_id))
-            
-            if cursor.rowcount == 0:
-                return {"success": False, "message": "找不到該筆交易"}
-                
-            conn.commit()
-            return {"success": True, "message": "更新成功"}
+        success, msg = transaction_service.update_transaction(
+            tx_id, account_id, date, time, summary, ref_no, amount
+        )
+        if success:
+            return {"success": True, "message": msg}
+        else:
+            return {"success": False, "message": msg}
     except Exception as e:
         return {"success": False, "message": f"資料庫錯誤: {str(e)}"}
 
@@ -79,35 +59,8 @@ async def check_duplicates(payload: dict = Body(...)):
     if not account_id:
         return {"success": False, "message": "未指定帳戶"}
 
-    results = []
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        
-        for tx in transactions:
-            date = tx.get('date', '')
-            time = tx.get('time', '')
-            ref_no = tx.get('ref_no', '')
-            amount = tx.get('amount', 0)
-            
-            raw_id_batch = f"BATCH|{account_id}|{date}|{time}|{ref_no}|{amount}"
-            hash_batch = hashlib.sha256(raw_id_batch.encode()).hexdigest()
-
-            raw_id_manual = f"MANUAL|{account_id}|{date}|{time}|{amount}|{ref_no}"
-            hash_manual = hashlib.sha256(raw_id_manual.encode()).hexdigest()
-            
-            query = """
-                SELECT 1 FROM transactions 
-                WHERE (trace_hash = ? OR trace_hash = ?)
-            """
-            params = [hash_batch, hash_manual]
-            
-            if exclude_id:
-                query += " AND transaction_id != ?"
-                params.append(exclude_id)
-            
-            cursor.execute(query, tuple(params))
-            exists = cursor.fetchone() is not None
-            results.append(exists)
-
-    return {"success": True, "duplicates": results}
+    try:
+        results = transaction_service.check_duplicates(account_id, transactions, exclude_id)
+        return {"success": True, "duplicates": results}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
