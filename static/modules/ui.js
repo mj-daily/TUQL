@@ -6,6 +6,7 @@ export const els = {
     fileInput: document.getElementById('fileInput'),
     statusMsg: document.getElementById('statusMsg'),
     accountList: document.getElementById('account-list'),
+    accountSummary: document.getElementById('account-summary'),
     importAccountSelect: document.getElementById('importAccountSelect'),
     txTableBody: document.querySelector('#txTable tbody'),
     noDataMsg: document.getElementById('noDataMsg'),
@@ -65,15 +66,24 @@ export const UI = {
         let netWorth = 0;
         accounts.forEach(acc => netWorth += acc.balance);
         
-        let html = `
-            <div class="account-card ${currentFilterId === null ? 'active' : ''}" 
-                 onclick="window.filterByAccount(null)" style="background: linear-gradient(135deg, #6366f1, #4338ca);">
-                <div class="acc-name">總覽</div>
-                <div class="acc-balance">$${netWorth.toLocaleString()}</div>
-                <div class="acc-number">總資產淨值</div>
+        // 1. Render Summary Info Bar (Total Overview)
+        const summaryActive = currentFilterId === null ? 'active' : '';
+        const summaryHtml = `
+            <div class="summary-content ${summaryActive}" onclick="window.filterByAccount(null)">
+                <div class="summary-left">
+                    <span class="summary-label">總資產淨值</span>
+                    <span class="summary-value">$${netWorth.toLocaleString()}</span>
+                </div>
+                <div class="summary-right">
+                    <span class="summary-hint">檢視總覽</span>
+                    <span class="summary-icon">➔</span>
+                </div>
             </div>
         `;
+        if (els.accountSummary) els.accountSummary.innerHTML = summaryHtml;
 
+        // 2. Render Account Cards
+        let html = '';
         accounts.forEach(acc => {
             let cardClass = (acc.bank_code === '' || acc.account_name === 'Manual-Import') ? 'acc-card-manual' : '';
             html += `

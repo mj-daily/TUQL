@@ -1,7 +1,7 @@
-import { API } from './modules/api.js';
-import { UI, els } from './modules/ui.js';
-import { state, getFilteredTransactions } from './modules/state.js';
-import * as Utils from './modules/utils.js';
+import { API } from './modules/api.js?v=3';
+import { UI, els } from './modules/ui.js?v=3';
+import { state, getFilteredTransactions } from './modules/state.js?v=3';
+import * as Utils from './modules/utils.js?v=3';
 
 // --- Initialization ---
 

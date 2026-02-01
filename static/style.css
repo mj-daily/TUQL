@@ -229,25 +229,107 @@ h1 { font-weight: 700; color: var(--text-main); margin-bottom: 30px; display: fl
     border-radius: 4px;
 }
 
+/* 總覽資訊列 (Summary Info Bar) */
+.summary-info-bar {
+    margin-bottom: 20px;
+}
+
+.summary-content {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border: 1px solid var(--border-color);
+    border-left: 5px solid var(--primary-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.summary-content:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    transform: translateY(-1px);
+}
+
+.summary-content.active {
+    background: #f0f9ff; /* Light blue tint */
+    border-color: #bae6fd;
+    border-left-color: var(--primary-color);
+}
+
+.summary-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.summary-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.summary-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--text-main);
+    line-height: 1.2;
+}
+
+.summary-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--primary-color);
+    font-weight: 600;
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.summary-content:hover .summary-right {
+    opacity: 1;
+}
+
 /* 帳戶列表容器 */
 .account-scroll-container {
     display: flex;
     gap: 16px;
     overflow-x: auto;
-    padding-bottom: 10px; /* 預留捲軸空間 */
+    padding-bottom: 12px; /* 預留捲軸空間，稍微加大 */
     margin-bottom: 24px;
+    scroll-behavior: smooth;
     
-    /* 隱藏捲軸 (Chrome/Safari) */
-    scrollbar-width: none; 
-    -ms-overflow-style: none;
+    /* 自訂捲軸樣式 (讓 PC 使用者可以滑動) */
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f1f5f9;
 }
+
+/* Webkit 瀏覽器捲軸設定 */
 .account-scroll-container::-webkit-scrollbar {
-    display: none;
+    height: 8px;
+    display: block; /* 確保顯示 */
+}
+.account-scroll-container::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+.account-scroll-container::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+.account-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 
 /* 帳戶卡片本體 */
 .account-card {
-    min-width: 260px;
+    min-width: 280px; /* 固定寬度確保水平排列 */
+    max-width: 320px;
+    flex-shrink: 0;   /* 防止被擠壓 */
     background: linear-gradient(135deg, #2563eb, #1e40af); /* 藍色漸層 */
     color: white;
     border-radius: 16px;
