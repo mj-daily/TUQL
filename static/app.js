@@ -1,7 +1,7 @@
-import { API } from './modules/api.js?v=3';
-import { UI, els } from './modules/ui.js?v=3';
-import { state, getFilteredTransactions } from './modules/state.js?v=3';
-import * as Utils from './modules/utils.js?v=3';
+import { API } from './modules/api.js?v=4';
+import { UI, els } from './modules/ui.js?v=4';
+import { state, getFilteredTransactions } from './modules/state.js?v=4';
+import * as Utils from './modules/utils.js?v=4';
 
 // --- Initialization ---
 
@@ -9,7 +9,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadAccounts();
     await loadTransactions();
     
-    // Global Event Listeners
+    // Modals
+    els.btnConfirmImport.onclick = handleConfirmImport;
+
+    // Keyboard support for File Selection Modal
+    document.addEventListener('keydown', (e) => {
+        if (els.fileSelectionModal.style.display === 'block') {
+            if (e.key === 'Escape') els.fileSelectionModal.style.display = 'none';
+            if (e.key === 'Enter') handleConfirmImport();
+        }
+    });
+
     els.ocrBatchList.addEventListener('input', (e) => {
         if (e.target.tagName === 'INPUT') debouncedCheckBatchDuplicates();
     });
@@ -32,8 +42,8 @@ const debouncedCheckEdit = Utils.debounce(() => checkEditDuplicate(), 500);
 async function loadAccounts() {
     try {
         const accounts = await API.getAccounts();
+        state.accounts = accounts; // Store for lookup
         UI.renderAccountCards(accounts, state.currentFilterAccountId);
-        UI.updateImportSelect(accounts);
     } catch (e) {
         UI.showStatus("載入帳戶失敗", 'error');
     }
@@ -291,15 +301,42 @@ async function checkEditDuplicate() {
 
 // --- Imports (PDF / OCR) ---
 
-els.fileInput.onchange = async (e) => {
-    const files = e.target.files;
-    if (files.length === 0) return;
-    
-    if (!els.importAccountSelect.value) {
-        alert("請先選擇「匯入目標帳戶」");
-        els.fileInput.value = '';
+window.openFileSelectionModal = (accountId) => {
+    state.targetAccountId = accountId;
+    els.fileInput.value = ''; // Clear selection
+    els.selectedFileList.innerHTML = '<span style="color: #94a3b8; font-style: italic;">尚未選擇檔案...</span>';
+    els.fileSelectionModal.style.display = 'block';
+};
+
+els.fileInput.onchange = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) {
+        els.selectedFileList.innerHTML = '<span style="color: #94a3b8; font-style: italic;">尚未選擇檔案...</span>';
         return;
     }
+    
+    // Check mixed types (optional, but good for UX)
+    const allPdf = files.every(f => f.type === 'application/pdf');
+    const allImg = files.every(f => f.type.startsWith('image/'));
+    
+    if (!allPdf && !allImg) {
+        alert("請勿混合上傳 PDF 與 圖片，且不支援其他格式");
+        els.fileInput.value = '';
+        els.selectedFileList.innerHTML = '<span style="color: #94a3b8; font-style: italic;">尚未選擇檔案...</span>';
+        return;
+    }
+
+    els.selectedFileList.innerHTML = files.map(f => 
+        `<div style="padding: 4px 0; border-bottom: 1px dashed #e2e8f0;">📄 ${f.name} <small style="color:#64748b">(${(f.size/1024).toFixed(1)} KB)</small></div>`
+    ).join('');
+};
+
+async function handleConfirmImport() {
+    const files = els.fileInput.files;
+    if (files.length === 0) return alert("請先選擇檔案");
+    
+    // Close selection modal
+    els.fileSelectionModal.style.display = 'none';
 
     if (files[0].type === "application/pdf") {
         if (files.length > 1) return alert("PDF 請逐一上傳");
@@ -311,7 +348,7 @@ els.fileInput.onchange = async (e) => {
     } else {
         alert("不支援格式");
     }
-};
+}
 
 // PDF Logic
 document.getElementById('btnSubmit').onclick = async () => {
@@ -319,16 +356,13 @@ document.getElementById('btnSubmit').onclick = async () => {
     const pwd = document.getElementById('pdfPwd').value;
     if (!pwd) return alert("請輸入密碼");
     
-    const accountSelect = els.importAccountSelect;
-    const selectedOption = accountSelect.options[accountSelect.selectedIndex];
+    const accountId = state.targetAccountId;
+    const targetAccountObj = state.accounts.find(a => a.account_id === accountId);
     
-    // Debug Log
-    console.log("Selected Option:", selectedOption);
-    console.log("Bank Code:", selectedOption.dataset.bankCode);
-    console.log("Acc Num:", selectedOption.dataset.accountNumber);
+    if (!targetAccountObj) return alert("無法找到目標帳戶");
 
-    const bankCode = selectedOption.dataset.bankCode;
-    const targetAccount = selectedOption.dataset.accountNumber;
+    const bankCode = targetAccountObj.bank_code;
+    const targetAccountNum = targetAccountObj.account_number;
 
     state.isPdfUploading = true;
     const btn = document.getElementById('btnSubmit');
@@ -341,12 +375,7 @@ document.getElementById('btnSubmit').onclick = async () => {
         formData.append('file', els.fileInput.files[0]);
         formData.append('password', pwd);
         formData.append('bank_code', bankCode);
-        if (targetAccount) {
-            formData.append('target_account', targetAccount);
-            console.log("Appending target_account:", targetAccount);
-        } else {
-            console.warn("No target_account found in dataset");
-        }
+        formData.append('target_account', targetAccountNum);
 
         const res = await API.previewPdf(formData);
         if (res.success) {
@@ -369,11 +398,13 @@ document.getElementById('btnCancel').onclick = () => {
 
 // OCR Logic
 async function handleBatchImageUpload(files) {
-    const accountSelect = els.importAccountSelect;
-    const bankCode = accountSelect.options[accountSelect.selectedIndex].dataset.bankCode;
+    const accountId = state.targetAccountId;
+    const targetAccountObj = state.accounts.find(a => a.account_id === accountId);
+    if (!targetAccountObj) return alert("無法找到目標帳戶");
+
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) formData.append('files', files[i]);
-    formData.append('bank_code', bankCode);
+    formData.append('bank_code', targetAccountObj.bank_code);
 
     UI.showStatus(`⏳ 辨識中 (${files.length} 張)...`);
     
@@ -389,8 +420,11 @@ async function handleBatchImageUpload(files) {
 }
 
 function openOcrBatchModal(items) {
-    const accountSelect = els.importAccountSelect;
-    document.getElementById('ocrTargetAccountDisplay').innerText = accountSelect.options[accountSelect.selectedIndex].text;
+    const accountId = state.targetAccountId;
+    const targetAccountObj = state.accounts.find(a => a.account_id === accountId);
+    const accLabel = targetAccountObj ? `${targetAccountObj.account_name} (${targetAccountObj.account_number})` : '未知帳戶';
+    
+    document.getElementById('ocrTargetAccountDisplay').innerText = accLabel;
     
     items.forEach(item => item.date = Utils.normalizeDate(item.date));
     UI.renderBatchCards(items);
@@ -409,7 +443,7 @@ window.removeOcrCard = (btn) => {
 };
 
 async function checkBatchDuplicates() {
-    const accountId = els.importAccountSelect.value;
+    const accountId = state.targetAccountId;
     if (!accountId) return;
 
     const transactions = UI.getBatchTransactions();
@@ -427,7 +461,7 @@ async function checkBatchDuplicates() {
 }
 
 window.saveOcrBatch = async () => {
-    const accountId = els.importAccountSelect.value;
+    const accountId = state.targetAccountId;
     const transactions = UI.getBatchTransactions().filter(t => t.date && !isNaN(t.amount));
     
     if (transactions.length === 0) return alert("無有效資料");

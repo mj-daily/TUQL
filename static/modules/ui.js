@@ -7,7 +7,6 @@ export const els = {
     statusMsg: document.getElementById('statusMsg'),
     accountList: document.getElementById('account-list'),
     accountSummary: document.getElementById('account-summary'),
-    importAccountSelect: document.getElementById('importAccountSelect'),
     txTableBody: document.querySelector('#txTable tbody'),
     noDataMsg: document.getElementById('noDataMsg'),
     statsIncomeTotal: document.getElementById('stats-income-total'),
@@ -26,6 +25,9 @@ export const els = {
     pwdModal: document.getElementById('pwdModal'),
     ocrBatchModal: document.getElementById('ocrBatchModal'),
     ocrModal: document.getElementById('ocrModal'),
+    fileSelectionModal: document.getElementById('fileSelectionModal'),
+    selectedFileList: document.getElementById('selectedFileList'),
+    btnConfirmImport: document.getElementById('btnConfirmImport'),
 
     // Edit Form
     editId: document.getElementById('editId'),
@@ -89,6 +91,7 @@ export const UI = {
             html += `
                 <div class="account-card ${cardClass} ${currentFilterId === acc.account_id ? 'active' : ''}" 
                      onclick="window.filterByAccount(${acc.account_id})">
+                    <button class="btn-import-icon" title="匯入交易 (PDF 對帳單 或 截圖)" onclick="event.stopPropagation(); window.openFileSelectionModal(${acc.account_id})">+</button>
                     <div class="acc-name">${acc.account_name}</div>
                     <div class="acc-balance">$${acc.balance.toLocaleString()}</div>
                     <div class="acc-number">${acc.account_number}</div>
@@ -96,20 +99,6 @@ export const UI = {
             `;
         });
         els.accountList.innerHTML = html;
-    },
-
-    updateImportSelect: (accounts) => {
-        const currentVal = els.importAccountSelect.value;
-        els.importAccountSelect.innerHTML = '<option value="">-- 請先選擇帳戶 --</option>';
-        accounts.forEach(acc => {
-            const option = document.createElement('option');
-            option.value = acc.account_id;
-            option.text = `${acc.account_name} (${acc.account_number}) - ${acc.bank_code}`;
-            option.dataset.bankCode = acc.bank_code;
-            option.dataset.accountNumber = acc.account_number;
-            els.importAccountSelect.appendChild(option);
-        });
-        if (currentVal) els.importAccountSelect.value = currentVal;
     },
 
     renderAccTable: (accounts) => {

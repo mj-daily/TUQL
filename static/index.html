@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>My Finance Dash</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260201-2">
+    <link rel="stylesheet" href="/static/style.css?v=20260201-3">
 </head>
 <body>
     <div class="container">
@@ -20,20 +20,8 @@
         <div id="account-list" class="account-scroll-container">
             </div>
 
-        <div class="card">
-            <h3>匯入交易 (PDF 對帳單 或 截圖)</h3>
-            <div style="margin-bottom: 15px;">
-                <!-- <label style="font-weight: bold; color: var(--text-muted); font-size: 0.9rem;">選擇來源銀行：</label> -->
-                <div style="margin-bottom: 15px;">
-                <label style="font-weight: bold; color: var(--text-muted); font-size: 0.9rem;">匯入目標帳戶：</label>
-                    <select id="importAccountSelect" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 1rem; width: 100%;">
-                        <option value="">-- 請先選擇帳戶 --</option>
-                    </select>
-                </div>
-            </div>
-            <input type="file" id="fileInput" accept=".pdf,image/*" multiple>
-            <p id="statusMsg" style="color: blue; margin-top: 10px;"></p>
-        </div>
+        <!-- NEW: Imported Transaction status message, keeping it global -->
+        <p id="statusMsg" style="color: blue; margin-top: 10px;"></p>
 
         <div class="card">
             <div class="card-header-row">
@@ -96,6 +84,32 @@
             <br>
             <button id="btnSubmit" class="btn">確認上傳</button>
             <button id="btnCancel" class="btn btn-cancel">取消</button>
+        </div>
+    </div>
+
+    <!-- NEW: File Selection Modal -->
+    <div id="fileSelectionModal" class="modal">
+        <div class="modal-content">
+            <h3>匯入交易 (PDF/截圖)</h3>
+            <p style="font-size: 0.9rem; color: #64748b; margin-bottom: 20px;">
+                支援格式：PDF (電子對帳單) 或 圖片 (交易截圖)
+            </p>
+
+            <div style="text-align: center; margin-bottom: 20px;">
+                <button class="btn" onclick="document.getElementById('fileInput').click()" style="background-color: #64748b; width: 100%;">
+                    📂 選擇檔案
+                </button>
+                <input type="file" id="fileInput" accept=".pdf,image/*" multiple style="display: none;">
+            </div>
+
+            <div id="selectedFileList" style="text-align: left; background: #f8fafc; padding: 10px; border-radius: 6px; margin-bottom: 20px; min-height: 50px; font-size: 0.9rem; color: #334155;">
+                <span style="color: #94a3b8; font-style: italic;">尚未選擇檔案...</span>
+            </div>
+
+            <div class="modal-actions">
+                <button id="btnConfirmImport" class="btn">確認</button>
+                <button class="btn btn-cancel" onclick="document.getElementById('fileSelectionModal').style.display='none'">取消</button>
+            </div>
         </div>
     </div>
 
@@ -243,6 +257,6 @@
         </div>
     </div>
 
-    <script type="module" src="/static/app.js?v=20260201-2"></script>
+    <script type="module" src="/static/app.js?v=20260201-3"></script>
 </body>
 </html>
