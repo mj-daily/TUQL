@@ -351,7 +351,7 @@ document.getElementById('btnSubmit').onclick = async () => {
         const res = await API.previewPdf(formData);
         if (res.success) {
             UI.showStatus("✅ 解析完成", 'success');
-            openPdfConfirmModal(res.data);
+            openOcrBatchModal(res.data.transactions);
         } else {
             UI.showStatus("❌ " + res.message, 'error');
         }
@@ -365,49 +365,6 @@ document.getElementById('btnSubmit').onclick = async () => {
 
 document.getElementById('btnCancel').onclick = () => {
     els.pwdModal.style.display = 'none'; els.fileInput.value = '';
-};
-
-// PDF Confirm Modal
-async function openPdfConfirmModal(data) {
-    const accountSelect = els.importAccountSelect;
-    document.getElementById('pdfTargetAccountDisplay').innerText = accountSelect.options[accountSelect.selectedIndex].text;
-    
-    state.pendingPdfTransactions = data.transactions.map(tx => ({
-        ...tx,
-        date: Utils.normalizeDate(tx.date)
-    }));
-
-    // Auto-match removed since we now force user to select account upfront, 
-    // but the modal logic remains for confirmation (simplified).
-    els.pdfConfirmModal.style.display = 'block';
-}
-
-window.closePdfConfirmModal = () => {
-    els.pdfConfirmModal.style.display = 'none';
-    els.fileInput.value = '';
-    state.pendingPdfTransactions = [];
-};
-
-window.savePdfBatch = async () => {
-    const accountId = els.importAccountSelect.value;
-    const btn = document.getElementById('btnPdfSave');
-    btn.innerText = "⏳ 匯入中..."; btn.disabled = true;
-
-    try {
-        const res = await API.saveBatch({
-            account_id: parseInt(accountId),
-            transactions: state.pendingPdfTransactions
-        });
-        if (res.success) {
-            window.closePdfConfirmModal();
-            UI.showStatus("✅ " + res.message, 'success');
-            loadAccounts();
-            loadTransactions();
-        } else {
-            alert("匯入失敗: " + res.message);
-        }
-    } catch (e) { alert("連線錯誤"); }
-    finally { btn.innerText = "確認匯入"; btn.disabled = false; }
 };
 
 // OCR Logic

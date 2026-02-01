@@ -23,7 +23,6 @@ export const els = {
     accModal: document.getElementById('accModal'),
     editModal: document.getElementById('editModal'),
     pwdModal: document.getElementById('pwdModal'),
-    pdfConfirmModal: document.getElementById('pdfConfirmModal'),
     ocrBatchModal: document.getElementById('ocrBatchModal'),
     ocrModal: document.getElementById('ocrModal'),
 

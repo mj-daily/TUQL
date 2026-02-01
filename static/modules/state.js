@@ -2,7 +2,6 @@
 export const state = {
     allTransactions: [],
     currentFilterAccountId: null, // null represents 'All'
-    pendingPdfTransactions: [],
     isPdfUploading: false,
     currentYearMonth: "",
     currentView: "details",

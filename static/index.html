@@ -98,7 +98,7 @@
 
     <div id="ocrBatchModal" class="modal">
         <div class="modal-content" style="max-width: 600px; max-height: 90vh; display: flex; flex-direction: column;">
-            <h3>📸 圖片辨識結果校對</h3>
+            <h3>� 匯入資料預覽核對</h3>
             
             <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left;">
                 <label style="font-size: 0.85rem; color: #64748b; font-weight: bold;">匯入目標帳戶</label>
@@ -240,40 +240,6 @@
         </div>
     </div>
 
-    <div id="pdfConfirmModal" class="modal">
-        <div class="modal-content" style="max-width: 500px;">
-            <h3>📂 確認 PDF 匯入資訊</h3>
-            <!-- <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">
-                請確認歸戶目標，避免資料分散
-            </p>
-
-            <div class="ocr-form">
-                <div style="background: #f1f5f9; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
-                    <div style="font-size: 0.85rem; color: #64748b;">PDF 偵測帳號</div>
-                    <div id="pdfDetectedAcc" style="font-weight: bold; font-size: 1.2rem; color: #2563eb;">---</div>
-                    <div id="pdfTxCount" style="font-size: 0.85rem; color: #64748b; margin-top: 5px;">共 0 筆交易</div>
-                </div>
-
-                <div class="form-item">
-                    <label>請選擇匯入目標帳戶 (必選)</label>
-                    <select id="pdfTargetAccount" style="padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); width: 100%; font-size: 1rem;">
-                        <option value="">-- 請選擇 --</option>
-                        </select>
-                </div>
-            </div> -->
-
-            <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left;">
-                <label style="font-size: 0.85rem; color: #64748b; font-weight: bold;">匯入目標帳戶</label>
-                <div id="pdfTargetAccountDisplay" style="font-weight: bold; font-size: 1.1rem; color: #334155; margin-top: 5px;"></div>
-            </div>
-
-            <div style="margin-top: 25px; display: flex; flex-direction: column; gap: 10px;">
-                <button id="btnPdfSave" class="btn" onclick="savePdfBatch()">確認匯入</button>
-                <button class="btn btn-cancel" onclick="closePdfConfirmModal()">取消</button>
-            </div>
-        </div>
-    </div>
-
-    <script type="module" src="/static/app.js"></script>
+    <script type="module" src="/static/app.js?v=1"></script>
 </body>
 </html>
