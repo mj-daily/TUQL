@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>My Finance Dash</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260201-3">
+    <link rel="stylesheet" href="/static/style.css?v=20260201-4">
 </head>
 <body>
     <div class="container">
@@ -24,19 +24,20 @@
         <p id="statusMsg" style="color: blue; margin-top: 10px;"></p>
 
         <div class="card">
-            <div class="card-header-row">
-                <h3>交易紀錄</h3>
+            <div class="transaction-toolbar">
+                <h3 class="toolbar-title">交易紀錄</h3>
+                
+                <div class="month-picker-controls">
+                    <button class="btn-icon" onclick="changeMonth(-1)" title="上個月">◀</button>
+                    <input type="month" id="monthPicker" onchange="handleMonthChange()">
+                    <button class="btn-icon" onclick="changeMonth(1)" title="下個月">▶</button>
+                    <button class="btn-text" onclick="resetToCurrentMonth()">回本月</button>
+                </div>
+
                 <div class="view-toggle">
                     <button class="toggle-btn active" onclick="switchView('details')" id="btnViewDetails">明細</button>
                     <button class="toggle-btn" onclick="switchView('stats')" id="btnViewStats">統計</button>
                 </div>
-            </div>
-
-            <div class="month-filter-bar">
-                <button class="btn-icon" onclick="changeMonth(-1)" title="上個月">◀</button>
-                <input type="month" id="monthPicker" onchange="handleMonthChange()">
-                <button class="btn-icon" onclick="changeMonth(1)" title="下個月">▶</button>
-                <button class="btn-text" onclick="resetToCurrentMonth()">回本月</button>
             </div>
 
             <div id="view-details">
@@ -58,21 +59,27 @@
             </div>
 
             <div id="view-stats" style="display: none;">
-                <div class="stats-section">
-                    <h4 class="amount-pos">💰 收入統計 <span id="stats-income-total" class="stats-total"></span></h4>
+                <details class="stats-section">
+                    <summary class="amount-pos stats-summary">
+                        <span>💰 收入統計</span>
+                        <span id="stats-income-total" class="stats-total"></span>
+                    </summary>
                     <table class="stats-table" id="statsTableIncome">
                         <thead><tr><th>摘要項目</th><th>筆數</th><th style="text-align:right">總金額</th></tr></thead>
                         <tbody></tbody>
                     </table>
-                </div>
+                </details>
                 
-                <div class="stats-section" style="margin-top: 20px;">
-                    <h4 class="amount-neg">💸 支出統計 <span id="stats-expense-total" class="stats-total"></span></h4>
+                <details class="stats-section" style="margin-top: 10px;">
+                    <summary class="amount-neg stats-summary">
+                        <span>💸 支出統計</span>
+                        <span id="stats-expense-total" class="stats-total"></span>
+                    </summary>
                     <table class="stats-table" id="statsTableExpense">
                         <thead><tr><th>摘要項目</th><th>筆數</th><th style="text-align:right">總金額</th></tr></thead>
                         <tbody></tbody>
                     </table>
-                </div>
+                </details>
             </div>
         </div>
     </div>
@@ -257,6 +264,6 @@
         </div>
     </div>
 
-    <script type="module" src="/static/app.js?v=20260201-3"></script>
+    <script type="module" src="/static/app.js?v=20260201-4"></script>
 </body>
 </html>

@@ -443,12 +443,21 @@ tr:hover { background-color: #f1f5f9; }
 
 input[type="password"], input[type="file"] { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; }
 
-/* 卡片標題列 (讓標題與切換按鈕並排) */
-.card-header-row {
+/* Transaction Toolbar (Refactored Header) */
+.transaction-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
     margin-bottom: 15px;
+}
+
+/* Ensure h3 inside toolbar doesn't have huge margins */
+.transaction-toolbar h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--text-muted);
 }
 
 /* 檢視模式切換按鈕 (Segmented Control 風格) */
@@ -475,23 +484,19 @@ input[type="password"], input[type="file"] { width: 100%; box-sizing: border-box
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-/* 月份篩選列 */
-.month-filter-bar {
+/* Month Picker Controls (inside Toolbar) */
+.month-picker-controls {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 20px;
-    background: #f8fafc;
-    padding: 10px;
-    border-radius: 8px;
+    gap: 8px;
 }
-.month-filter-bar input[type="month"] {
+.month-picker-controls input[type="month"] {
     border: 1px solid var(--border-color);
-    padding: 6px 12px;
+    padding: 5px 8px;
     border-radius: 6px;
     font-family: inherit;
-    font-size: 1rem;
+    font-size: 0.9rem;
     background: white;
 }
 .btn-text {
@@ -504,17 +509,50 @@ input[type="password"], input[type="file"] { width: 100%; box-sizing: border-box
 }
 
 /* 統計表格樣式 */
-.stats-section h4 {
-    margin: 0 0 10px 0;
-    padding-left: 8px;
-    border-left: 4px solid currentColor;
+
+/* Valid Styles for Details/Summary */
+details.stats-section {
+    border: 1px solid var(--border-color); /* Visible border */
+    border-radius: 8px; /* Rounded corners */
+    margin-bottom: 10px;
+    background: white; /* Ensure bg is white */
 }
+/* For collapsed state, maybe simple spacing */
+
+summary.stats-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background-color: #f8fafc;
+    cursor: pointer;
+    font-weight: bold;
+    list-style: none;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+summary.stats-summary::-webkit-details-marker {
+    display: none; /* Hide default triangle */
+}
+summary.stats-summary:hover {
+    background-color: #f1f5f9;
+}
+details[open] summary.stats-summary {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Colored Indicators */
+summary.amount-pos { border-left: 5px solid var(--success-color); color: var(--text-main); }
+summary.amount-neg { border-left: 5px solid var(--danger-color); color: var(--text-main); }
+
 .stats-total {
-    margin-left: 8px;
     font-weight: 700;
-    font-size: 0.95rem;
-    color: currentColor;
+    font-size: 1rem;
 }
+.amount-pos .stats-total { color: var(--success-color); }
+.amount-neg .stats-total { color: var(--danger-color); }
 .stats-table {
     width: 100%;
     border-collapse: collapse;
