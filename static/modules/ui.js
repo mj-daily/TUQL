@@ -63,6 +63,13 @@ export const UI = {
         els.statusMsg.innerText = '';
     },
 
+    toggleAccountList: (event) => {
+        if (event) event.stopPropagation();
+        if (els.accountList) els.accountList.classList.toggle('expanded');
+        const icon = document.querySelector('.summary-icon');
+        if (icon) icon.classList.toggle('rotate');
+    },
+
     // --- Account Rendering ---
     renderAccountCards: (accounts, currentFilterId) => {
         let netWorth = 0;
@@ -71,14 +78,14 @@ export const UI = {
         // 1. Render Summary Info Bar (Total Overview)
         const summaryActive = currentFilterId === null ? 'active' : '';
         const summaryHtml = `
-            <div class="summary-content ${summaryActive}" onclick="window.filterByAccount(null)">
-                <div class="summary-left">
+            <div class="summary-content ${summaryActive}">
+                <div class="summary-left" onclick="window.filterByAccount(null)">
                     <span class="summary-label">總資產淨值</span>
                     <span class="summary-value">$${netWorth.toLocaleString()}</span>
                 </div>
-                <div class="summary-right">
-                    <span class="summary-hint">檢視總覽</span>
-                    <span class="summary-icon">➔</span>
+                <div class="summary-right" onclick="UI.toggleAccountList(event)">
+                    <span class="summary-hint">檢視帳戶</span>
+                    <span class="summary-icon">▼</span>
                 </div>
             </div>
         `;
@@ -332,4 +339,4 @@ export const UI = {
             }
         });
     }
-};
+};window.UI = UI;
